@@ -43,10 +43,9 @@ export function generateStaticParams() {
     ];
 }
 
-export default function BlogPost({ params }: { params: { id: string } }) {
+export default function BlogPost({ }) {
     // In a real application, you would fetch the article based on the ID
     // For now, we'll just use the static article
-    console.log('Blog post id:', params.id);
 
     return (
         <article className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 bg-gray-900">
