@@ -34,7 +34,16 @@ const article = {
     readTime: '5 min read',
 };
 
-export default function BlogPost({ params }: { params: { id: string } }) {
+export function generateStaticParams() {
+    return [
+        { id: '1' },
+        { id: '2' },
+        { id: '3' }
+    ];
+}
+
+
+export default function BlogPost({ }) {
     return (
         <article className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
             {/* Article Header */}
