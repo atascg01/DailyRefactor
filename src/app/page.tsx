@@ -4,27 +4,27 @@ import Image from 'next/image';
 const featuredArticles = [
   {
     id: 1,
-    title: 'The Future of Web Development: What to Expect in 2024',
+    title: 'The Future of Web Development: What to Expect in 2025',
     excerpt: 'Explore the latest trends and technologies shaping the future of web development.',
     category: 'Web Development',
-    image: '/images/web-dev.jpg',
-    date: 'March 15, 2024',
+    image: 'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+    date: 'March 15, 2025',
   },
   {
     id: 2,
     title: 'Understanding TypeScript: A Comprehensive Guide',
     excerpt: 'Deep dive into TypeScript features and best practices for modern development.',
     category: 'TypeScript',
-    image: '/images/typescript.jpg',
-    date: 'March 14, 2024',
+    image: 'https://images.unsplash.com/photo-1627398242454-45a1465c2479?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+    date: 'March 14, 2025',
   },
   {
     id: 3,
     title: 'Building Scalable Applications with Microservices',
     excerpt: 'Learn how to design and implement microservices architecture effectively.',
     category: 'Architecture',
-    image: '/images/microservices.jpg',
-    date: 'March 13, 2024',
+    image: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+    date: 'March 13, 2025',
   },
 ];
 

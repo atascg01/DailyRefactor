@@ -1,5 +1,8 @@
+"use client";
+
 import Link from 'next/link';
 import Image from 'next/image';
+import { useState } from 'react';
 
 const categories = [
     'All',
@@ -13,11 +16,11 @@ const categories = [
 const articles = [
     {
         id: 1,
-        title: 'The Future of Web Development: What to Expect in 2024',
+        title: 'The Future of Web Development: What to Expect in 2025',
         excerpt: 'Explore the latest trends and technologies shaping the future of web development.',
         category: 'Web Development',
-        image: '/images/web-dev.jpg',
-        date: 'March 15, 2024',
+        image: 'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+        date: 'March 15, 2025',
         readTime: '5 min read',
     },
     {
@@ -25,8 +28,8 @@ const articles = [
         title: 'Understanding TypeScript: A Comprehensive Guide',
         excerpt: 'Deep dive into TypeScript features and best practices for modern development.',
         category: 'TypeScript',
-        image: '/images/typescript.jpg',
-        date: 'March 14, 2024',
+        image: 'https://images.unsplash.com/photo-1627398242454-45a1465c2479?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+        date: 'March 14, 2025',
         readTime: '8 min read',
     },
     {
@@ -34,8 +37,8 @@ const articles = [
         title: 'Building Scalable Applications with Microservices',
         excerpt: 'Learn how to design and implement microservices architecture effectively.',
         category: 'Architecture',
-        image: '/images/microservices.jpg',
-        date: 'March 13, 2024',
+        image: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+        date: 'March 13, 2025',
         readTime: '6 min read',
     },
     {
@@ -43,8 +46,8 @@ const articles = [
         title: 'Getting Started with Docker and Kubernetes',
         excerpt: 'A practical guide to containerization and orchestration for developers.',
         category: 'DevOps',
-        image: '/images/docker.jpg',
-        date: 'March 12, 2024',
+        image: 'https://images.unsplash.com/photo-1605745341112-85968b19335b?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+        date: 'March 12, 2025',
         readTime: '7 min read',
     },
     {
@@ -52,8 +55,8 @@ const articles = [
         title: 'Introduction to Machine Learning for Developers',
         excerpt: 'How to incorporate ML into your applications and services.',
         category: 'AI & Machine Learning',
-        image: '/images/ml.jpg',
-        date: 'March 11, 2024',
+        image: 'https://images.unsplash.com/photo-1677442136019-21780ecad995?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+        date: 'March 11, 2025',
         readTime: '10 min read',
     },
     {
@@ -61,13 +64,19 @@ const articles = [
         title: 'Best Practices for React Performance Optimization',
         excerpt: 'Learn how to optimize your React applications for better performance.',
         category: 'Web Development',
-        image: '/images/react.jpg',
-        date: 'March 10, 2024',
+        image: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
+        date: 'March 10, 2025',
         readTime: '6 min read',
     },
 ];
 
 export default function BlogPage() {
+    const [selectedCategory, setSelectedCategory] = useState('All');
+
+    const filteredArticles = selectedCategory === 'All'
+        ? articles
+        : articles.filter(article => article.category === selectedCategory);
+
     return (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
             {/* Header */}
@@ -83,7 +92,11 @@ export default function BlogPage() {
                 {categories.map((category) => (
                     <button
                         key={category}
-                        className="px-4 py-2 rounded-full text-sm font-medium bg-gray-100 text-gray-800 hover:bg-gray-200 transition-colors"
+                        onClick={() => setSelectedCategory(category)}
+                        className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${selectedCategory === category
+                            ? 'bg-blue-600 text-white hover:bg-blue-700'
+                            : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                            }`}
                     >
                         {category}
                     </button>
@@ -92,7 +105,7 @@ export default function BlogPage() {
 
             {/* Articles Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {articles.map((article) => (
+                {filteredArticles.map((article) => (
                     <article
                         key={article.id}
                         className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow"
