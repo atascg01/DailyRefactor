@@ -6,68 +6,19 @@ import { useState } from 'react';
 
 const categories = [
     'All',
-    'Web Development',
-    'TypeScript',
-    'Architecture',
-    'DevOps',
-    'AI & Machine Learning',
+    'Java'
 ];
 
 const articles = [
     {
         id: 1,
-        title: 'The Future of Web Development: What to Expect in 2025',
-        excerpt: 'Explore the latest trends and technologies shaping the future of web development.',
-        category: 'Web Development',
-        image: 'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
-        date: 'March 15, 2025',
-        readTime: '5 min read',
-    },
-    {
-        id: 2,
-        title: 'Understanding TypeScript: A Comprehensive Guide',
-        excerpt: 'Deep dive into TypeScript features and best practices for modern development.',
-        category: 'TypeScript',
+        title: 'Concurrency in Java: A guide to ExecutorService and Future',
+        excerpt: 'Learn how to effectively use ExecutorService and Future for concurrent programming in Java.',
+        category: 'Java',
         image: 'https://images.unsplash.com/photo-1627398242454-45a1465c2479?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
-        date: 'March 14, 2025',
-        readTime: '8 min read',
-    },
-    {
-        id: 3,
-        title: 'Building Scalable Applications with Microservices',
-        excerpt: 'Learn how to design and implement microservices architecture effectively.',
-        category: 'Architecture',
-        image: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
-        date: 'March 13, 2025',
-        readTime: '6 min read',
-    },
-    {
-        id: 4,
-        title: 'Getting Started with Docker and Kubernetes',
-        excerpt: 'A practical guide to containerization and orchestration for developers.',
-        category: 'DevOps',
-        image: 'https://images.unsplash.com/photo-1605745341112-85968b19335b?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
-        date: 'March 12, 2025',
-        readTime: '7 min read',
-    },
-    {
-        id: 5,
-        title: 'Introduction to Machine Learning for Developers',
-        excerpt: 'How to incorporate ML into your applications and services.',
-        category: 'AI & Machine Learning',
-        image: 'https://images.unsplash.com/photo-1677442136019-21780ecad995?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
-        date: 'March 11, 2025',
+        date: 'May 19, 2024',
         readTime: '10 min read',
-    },
-    {
-        id: 6,
-        title: 'Best Practices for React Performance Optimization',
-        excerpt: 'Learn how to optimize your React applications for better performance.',
-        category: 'Web Development',
-        image: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80',
-        date: 'March 10, 2025',
-        readTime: '6 min read',
-    },
+    }
 ];
 
 export default function BlogPage() {
