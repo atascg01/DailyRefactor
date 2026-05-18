@@ -89,7 +89,7 @@ export const articles: ArticleMeta[] = [
     title: "How to properly build an MCP server",
     excerpt:
       "A practical guide to building Model Context Protocol servers — covering tools, resources, and prompts, plus the rules that separate production servers from proof-of-concepts.",
-    category: "Backend",
+    category: "AI",
     image:
       "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80",
     date: "May 13, 2026",
