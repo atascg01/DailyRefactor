@@ -1,109 +1,124 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { useState } from 'react';
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
+import ThemeToggle from "./ThemeToggle";
+
+const links = [
+  { href: "/", label: "Home" },
+  { href: "/blog", label: "Blog" },
+  { href: "/about", label: "About" },
+];
 
 export default function Navigation() {
-    const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const pathname = usePathname();
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
 
-    return (
-        <nav className="bg-white shadow-lg">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div className="flex justify-between h-16">
-                    <div className="flex">
-                        <div className="flex-shrink-0 flex items-center">
-                            <Link href="/" className="text-2xl font-bold text-gray-800">
-                                DailyRefactor
-                            </Link>
-                        </div>
-                        <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-                            <Link
-                                href="/"
-                                className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                            >
-                                Home
-                            </Link>
-                            <Link
-                                href="/blog"
-                                className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                            >
-                                Blog
-                            </Link>
-                            <Link
-                                href="/about"
-                                className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
-                            >
-                                About
-                            </Link>
-                        </div>
-                    </div>
-                    <div className="-mr-2 flex items-center sm:hidden">
-                        <button
-                            onClick={() => setIsMenuOpen(!isMenuOpen)}
-                            className="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500"
-                        >
-                            <span className="sr-only">Open main menu</span>
-                            {!isMenuOpen ? (
-                                <svg
-                                    className="block h-6 w-6"
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M4 6h16M4 12h16M4 18h16"
-                                    />
-                                </svg>
-                            ) : (
-                                <svg
-                                    className="block h-6 w-6"
-                                    xmlns="http://www.w3.org/2000/svg"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                >
-                                    <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        strokeWidth={2}
-                                        d="M6 18L18 6M6 6l12 12"
-                                    />
-                                </svg>
-                            )}
-                        </button>
-                    </div>
-                </div>
+  useEffect(() => {
+    const handleScroll = () => setScrolled(window.scrollY > 10);
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  useEffect(() => {
+    setIsMenuOpen(false);
+  }, [pathname]);
+
+  const isActive = (href: string) => {
+    if (href === "/") return pathname === "/";
+    return pathname.startsWith(href);
+  };
+
+  return (
+    <nav
+      className={`sticky top-0 z-50 transition-all duration-300 ${
+        scrolled
+          ? "bg-[var(--background)]/80 backdrop-blur-xl border-b border-[var(--border)] shadow-sm"
+          : "bg-[var(--background)] border-b border-transparent"
+      }`}
+    >
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-16">
+          {/* Logo */}
+          <Link
+            href="/"
+            className="text-xl font-bold tracking-tight bg-gradient-to-r from-blue-500 to-blue-600 
+                       bg-clip-text text-transparent hover:from-blue-400 hover:to-blue-500 transition-all"
+          >
+            DailyRefactor
+          </Link>
+
+          {/* Desktop links */}
+          <div className="hidden sm:flex items-center gap-1">
+            {links.map(({ href, label }) => (
+              <Link
+                key={href}
+                href={href}
+                className={`relative px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                  isActive(href)
+                    ? "text-[var(--foreground)]"
+                    : "text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-[var(--accent)]"
+                }`}
+              >
+                {label}
+                {isActive(href) && (
+                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-0.5 bg-blue-500 rounded-full" />
+                )}
+              </Link>
+            ))}
+            <div className="ml-2">
+              <ThemeToggle />
             </div>
+          </div>
 
-            {/* Mobile menu */}
-            {isMenuOpen && (
-                <div className="sm:hidden">
-                    <div className="pt-2 pb-3 space-y-1">
-                        <Link
-                            href="/"
-                            className="block pl-3 pr-4 py-2 border-l-4 text-base font-medium border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700"
-                        >
-                            Home
-                        </Link>
-                        <Link
-                            href="/blog"
-                            className="block pl-3 pr-4 py-2 border-l-4 text-base font-medium border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700"
-                        >
-                            Blog
-                        </Link>
-                        <Link
-                            href="/about"
-                            className="block pl-3 pr-4 py-2 border-l-4 text-base font-medium border-transparent text-gray-500 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-700"
-                        >
-                            About
-                        </Link>
-                    </div>
-                </div>
-            )}
-        </nav>
-    );
-} 
+          {/* Mobile menu button */}
+          <div className="flex items-center gap-2 sm:hidden">
+            <ThemeToggle />
+            <button
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="p-2 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] 
+                         hover:bg-[var(--accent)] transition-colors"
+              aria-label="Toggle menu"
+            >
+              {isMenuOpen ? (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Mobile menu */}
+      <div
+        className={`sm:hidden overflow-hidden transition-all duration-300 ease-in-out ${
+          isMenuOpen ? "max-h-64 border-t border-[var(--border)]" : "max-h-0"
+        }`}
+      >
+        <div className="px-4 py-3 space-y-1 bg-[var(--background)]">
+          {links.map(({ href, label }) => (
+            <Link
+              key={href}
+              href={href}
+              className={`block px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isActive(href)
+                  ? "bg-[var(--accent)] text-[var(--foreground)]"
+                  : "text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
+              }`}
+            >
+              {label}
+            </Link>
+          ))}
+        </div>
+      </div>
+    </nav>
+  );
+}

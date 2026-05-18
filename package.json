@@ -1,27 +1,36 @@
 {
   "name": "dailyrefactor",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "next dev --turbo",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"
   },
   "dependencies": {
-    "next": "15.2.8",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "@mdx-js/loader": "^3.1.1",
+    "@mdx-js/mdx": "^3.1.1",
+    "@mdx-js/react": "^3.1.1",
+    "@next/mdx": "^16.2.6",
+    "framer-motion": "^12.38.0",
+    "geist": "^1.7.0",
+    "next": "^16.2.6",
+    "next-themes": "^0.4.6",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "rehype-pretty-code": "^0.14.3",
+    "shiki": "^4.0.2"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
     "@tailwindcss/typography": "^0.5.16",
-    "@types/node": "^20",
+    "@types/node": "^20.19.41",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "15.2.4",
+    "eslint-config-next": "^16.2.6",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

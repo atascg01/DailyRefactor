@@ -1,0 +1,110 @@
+<p>Nowadays, every developer out there must be familiar with some version control system. I have now worked in 5 different jobs. Every single one of them was using some kind of version control system.</p>
+
+<p>Even though there are many of them, the most used by far is Git.</p>
+
+<p>When working on a real project, we often need to create or modify a file we don't want to be added to the repository. The most common scenario for a backend developer is probably some local file configuration to access a local database or some kind of parameters that need to be passed to the execution of the server itself.</p>
+
+<p>For a frontend developer, you may be sick of hearing this but in case you forgot it, I'll remind you: **Never upload the `node_modules` folder!** The `node_modules` folder contains all dependencies of a project and is generated via `npm install`. This is equivalent to the dependencies folder of a Java project using Maven — imagine uploading that to your Git repository 😅</p>
+
+## Table of Contents
+
+- 1. Introduction
+- 2. .gitignore file
+- 3. Global exclude file
+- 4. Example
+- 5. Conclusion
+
+## 2. .gitignore file
+
+The most used approach is probably the `.gitignore` file. It is a file located in every local git project. As you can imagine, given that the file starts with a dot, it is a hidden file.
+
+Its exact location may vary depending on your IDE. In IntelliJ Idea it's inside the `.idea` folder. For Visual Studio, it's usually in the project's root.
+
+Here's a typical `.gitignore` from a generated React/Node project:
+
+```bash
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# testing
+/coverage
+
+# production
+/build
+
+# misc
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+```
+
+The pros of using this approach are quite evident: we have a **shared file** with all the developers in our team, because this file is uploaded to the git repository. If we, as a team, want to ignore some files or folders for all of us, we just add those to the `.gitignore` file.
+
+But precisely because it's a shared file — what if we want to ignore a private file that shouldn't be uploaded? We can't do it through `.gitignore`.
+
+## 3. Global exclude file
+
+There is a file at `.git/info/exclude` whose purpose is to ignore private files. This configuration **won't be pushed** to the repository — it's a private, local configuration.
+
+The idea is the same as `.gitignore`, but this file is never shared. This approach is incredibly beneficial for local configuration files.
+
+## 4. Example
+
+Say I have a `Main.java` file and a `local.conf` file, but I only want to add `Main.java` to the remote repository.
+
+Since `local.conf` is my personal and private local configuration, I'll add it to `.git/info/exclude`:
+
+```bash
+# git ls-files --others --exclude-from=.git/info/exclude
+# Lines that start with '#' are comments.
+# For a project mostly in C, the following would be a good set of
+# exclude patterns (uncomment them if you want to use them):
+# *.[oa]
+# *~
+local.conf
+```
+
+But if we run `git status` we'll find a surprise — it's still showing as added!
+
+```bash
+PS D:\Projects\git-testing> git status
+On branch feature-foo
+
+Changes to be committed:
+  (use "git restore --staged <file>..." to unstage)
+        new file:   local.conf
+        new file:   src/main/java/Main.java
+```
+
+Keep in mind: if the file was previously checked in, you'll need to run:
+
+```bash
+git rm --cached local.conf
+```
+
+> Note: Sometimes you'll need the `-f` (force) flag.
+
+After that, `git status` shows our file has disappeared from tracking:
+
+```bash
+PS D:\Projects\git-testing> git status
+On branch feature-foo
+
+Changes to be committed:
+  (use "git restore --staged <file>..." to unstage)
+        new file:   src/main/java/Main.java
+```
+
+## 5. Conclusion
+
+Now that you've learned how to ignore files in git, what are you waiting for? Stop wasting your time modifying that local configuration file — add it to the `excludes` file or talk to your team about adding it to the `.gitignore` file.
+
+I hope you enjoyed this quick post. Do you know some other ways to ignore files in Git? Let me know!
