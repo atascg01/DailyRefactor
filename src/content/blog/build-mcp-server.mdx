@@ -2,6 +2,30 @@ MCP — the Model Context Protocol — is the closest thing we have to a univers
 
 I've been building MCP servers for a few months now, and while the spec is clean, there's a gap between "it works on my machine" and "this belongs in production." Let me walk you through the primitives, show you real code, and then give you the rules that make the difference.
 
+## Table of Contents
+
+- [The three primitives](#the-three-primitives)
+  - [Tools — model-controlled actions](#tools--model-controlled-actions)
+  - [Resources — app-controlled data](#resources--app-controlled-data)
+  - [Prompts — user-controlled templates](#prompts--user-controlled-templates)
+- [Architecture: how the pieces fit](#architecture-how-the-pieces-fit)
+- [Building a server from scratch](#building-a-server-from-scratch)
+  - [Setup](#setup)
+  - [The server](#the-server)
+- [The rules for production MCP servers](#the-rules-for-production-mcp-servers)
+  - [1. Never write to stdout on stdio servers](#1-never-write-to-stdout-on-stdio-servers)
+  - [2. Validate inputs aggressively](#2-validate-inputs-aggressively)
+  - [3. Keep tools focused — one tool, one job](#3-keep-tools-focused--one-tool-one-job)
+  - [4. Descriptions are your API](#4-descriptions-are-your-api)
+  - [5. Return structured, markdown-friendly content](#5-return-structured-markdown-friendly-content)
+  - [6. Handle the unhappy path](#6-handle-the-unhappy-path)
+  - [7. Mind your secrets](#7-mind-your-secrets)
+  - [8. Test with the MCP Inspector](#8-test-with-the-mcp-inspector)
+  - [9. Version your server](#9-version-your-server)
+  - [10. One server per domain](#10-one-server-per-domain)
+- [What about Python?](#what-about-python)
+- [Bottom line](#bottom-line)
+
 ## The three primitives
 
 Every MCP server exposes one or more of three capabilities:

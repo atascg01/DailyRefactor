@@ -4,6 +4,16 @@ Java 25 is different. It's an LTS release, sure — but more importantly, it shi
 
 Let me walk through the four that matter most, with code you can steal.
 
+## Table of Contents
+
+- [1. Scoped Values are finally production-ready](#1-scoped-values-are-finally-production-ready)
+- [2. Compact Object Headers — smaller objects, less GC pressure](#2-compact-object-headers--smaller-objects-less-gc-pressure)
+- [3. Flexible Constructor Bodies — code before super()](#3-flexible-constructor-bodies--code-before-super)
+- [4. Module Import Declarations](#4-module-import-declarations)
+- [What else is in the box?](#what-else-is-in-the-box)
+- [The upgrade path](#the-upgrade-path)
+- [Bottom line](#bottom-line)
+
 ## 1. Scoped Values are finally production-ready
 
 If you've ever passed a `User` object through fifteen layers of a web framework just so the DAO layer can log who did what, you know the pain. ThreadLocal worked, but it was leaky, mutable, and didn't play nice with virtual threads.
