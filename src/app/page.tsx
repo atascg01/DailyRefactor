@@ -1,5 +1,6 @@
 import Hero from "@/components/Hero";
 import ArticleCard from "@/components/ArticleCard";
+import NewsletterForm from "@/components/NewsletterForm";
 import { articles } from "@/content/articles";
 
 export default function Home() {
@@ -36,22 +37,7 @@ export default function Home() {
           <p className="text-[var(--muted-foreground)] mb-8">
             New articles on software engineering, Java, DevOps, and career insights — delivered fresh every week.
           </p>
-          <div className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto">
-            <input
-              type="email"
-              placeholder="your@email.com"
-              className="flex-1 px-4 py-3 rounded-xl border border-[var(--border)] bg-[var(--background)] 
-                         text-sm placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 
-                         focus:ring-blue-500 focus:border-transparent transition-shadow"
-            />
-            <button className="px-6 py-3 rounded-xl bg-blue-600 text-white font-medium text-sm 
-                             hover:bg-blue-700 transition-colors active:scale-95">
-              Subscribe
-            </button>
-          </div>
-          <p className="mt-4 text-xs text-[var(--muted-foreground)]">
-            No spam, ever. Unsubscribe anytime.
-          </p>
+          <NewsletterForm />
         </div>
       </section>
     </>

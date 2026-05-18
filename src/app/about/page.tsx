@@ -41,8 +41,24 @@ export default function About() {
           </p>
 
           <p>
-            I hope you enjoy my blog. If you have any questions or comments, please{" "}
-            <Link href="/contact">contact me</Link>.
+            I hope you enjoy my blog. If you have any questions or comments, reach out to me on{" "}
+            <Link
+              href="https://x.com/atascg"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline"
+            >
+              X (Twitter)
+            </Link>{" "}
+            or{" "}
+            <Link
+              href="https://github.com/atascg01"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline"
+            >
+              GitHub
+            </Link>.
           </p>
         </div>
 
