@@ -83,6 +83,23 @@ export const articles: ArticleMeta[] = [
       role: "Senior Software Engineer @ Oracle",
     },
   },
+  {
+    id: 5,
+    slug: "build-mcp-server",
+    title: "How to properly build an MCP server",
+    excerpt:
+      "A practical guide to building Model Context Protocol servers — covering tools, resources, and prompts, plus the rules that separate production servers from proof-of-concepts.",
+    category: "Backend",
+    image:
+      "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80",
+    date: "May 18, 2026",
+    readTime: "12 min read",
+    author: {
+      name: "Andres Tascon",
+      avatar: "/images/pic_photo.jpg",
+      role: "Senior Software Engineer @ Oracle",
+    },
+  },
 ];
 
 export function getArticle(id: number): ArticleMeta | undefined {
