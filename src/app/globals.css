@@ -89,6 +89,12 @@ body {
   content: none;
 }
 
+/* Kill Tailwind Typography's backtick wrapping on inline code */
+.prose :where(code)::before,
+.prose :where(code)::after {
+  content: none;
+}
+
 [data-rehype-pretty-code-figure] code > [data-line] {
   padding: 0.125rem 0;
 }
