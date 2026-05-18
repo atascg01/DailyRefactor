@@ -140,3 +140,32 @@ body {
 .prose :where(a):hover {
   text-decoration: underline;
 }
+
+/* Table styles for prose */
+.prose :where(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5em 0;
+  font-size: 0.875em;
+}
+
+.prose :where(th) {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  font-weight: 600;
+  border-bottom: 2px solid var(--border);
+  background: var(--accent);
+}
+
+.prose :where(td) {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.prose :where(tr):last-child td {
+  border-bottom: none;
+}
+
+.prose :where(tr):hover td {
+  background: var(--accent);
+}
