@@ -67,8 +67,8 @@ export default function Hero() {
       </div>
 
       {/* Bottom wave */}
-      <div className="absolute bottom-0 left-0 right-0">
-        <svg viewBox="0 0 1440 120" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-auto">
+      <div className="absolute bottom-0 left-0 right-0 h-20 md:h-28">
+        <svg viewBox="0 0 1440 120" preserveAspectRatio="none" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
           <path
             d="M0 60C240 120 480 0 720 30C960 60 1200 0 1440 50V120H0V60Z"
             className="fill-[var(--background)]"
