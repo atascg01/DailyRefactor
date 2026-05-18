@@ -53,7 +53,9 @@ export default function CodeBlock({ children, ...props }: CodeBlockProps) {
           </button>
         </div>
       )}
-      {children}
+      <pre className="m-0 p-4 overflow-x-auto text-sm leading-relaxed">
+        {children}
+      </pre>
     </figure>
   );
 }

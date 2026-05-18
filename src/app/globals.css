@@ -67,6 +67,7 @@ body {
   border-radius: 0.75rem;
   overflow: hidden;
   border: 1px solid var(--border);
+  background: #0d1117;
 }
 
 [data-rehype-pretty-code-figure] pre {
@@ -80,6 +81,12 @@ body {
 [data-rehype-pretty-code-figure] code {
   display: grid;
   counter-reset: line;
+}
+
+/* Kill Tailwind Typography's backtick pseudo-elements on code blocks */
+.prose [data-rehype-pretty-code-figure] code::before,
+.prose [data-rehype-pretty-code-figure] code::after {
+  content: none;
 }
 
 [data-rehype-pretty-code-figure] code > [data-line] {
