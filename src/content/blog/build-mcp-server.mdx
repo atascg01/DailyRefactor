@@ -4,29 +4,29 @@ I've been building MCP servers for a few months now, and while the spec is clean
 
 ## Table of Contents
 
-- [The three primitives](#the-three-primitives)
-  - [Tools — model-controlled actions](#tools--model-controlled-actions)
-  - [Resources — app-controlled data](#resources--app-controlled-data)
-  - [Prompts — user-controlled templates](#prompts--user-controlled-templates)
-- [Architecture: how the pieces fit](#architecture-how-the-pieces-fit)
-- [Building a server from scratch](#building-a-server-from-scratch)
-  - [Setup](#setup)
-  - [The server](#the-server)
-- [The rules for production MCP servers](#the-rules-for-production-mcp-servers)
-  - [1. Never write to stdout on stdio servers](#1-never-write-to-stdout-on-stdio-servers)
-  - [2. Validate inputs aggressively](#2-validate-inputs-aggressively)
-  - [3. Keep tools focused — one tool, one job](#3-keep-tools-focused--one-tool-one-job)
-  - [4. Descriptions are your API](#4-descriptions-are-your-api)
-  - [5. Return structured, markdown-friendly content](#5-return-structured-markdown-friendly-content)
-  - [6. Handle the unhappy path](#6-handle-the-unhappy-path)
-  - [7. Mind your secrets](#7-mind-your-secrets)
-  - [8. Test with the MCP Inspector](#8-test-with-the-mcp-inspector)
-  - [9. Version your server](#9-version-your-server)
-  - [10. One server per domain](#10-one-server-per-domain)
-- [What about Python?](#what-about-python)
-- [Bottom line](#bottom-line)
+- [1. The three primitives](#1-the-three-primitives)
+  - [1.1 Tools — model-controlled actions](#11-tools--model-controlled-actions)
+  - [1.2 Resources — app-controlled data](#12-resources--app-controlled-data)
+  - [1.3 Prompts — user-controlled templates](#13-prompts--user-controlled-templates)
+- [2. Architecture: how the pieces fit](#2-architecture-how-the-pieces-fit)
+- [3. Building a server from scratch](#3-building-a-server-from-scratch)
+  - [3.1 Setup](#31-setup)
+  - [3.2 The server](#32-the-server)
+- [4. The rules for production MCP servers](#4-the-rules-for-production-mcp-servers)
+  - [4.1 Never write to stdout on stdio servers](#41-never-write-to-stdout-on-stdio-servers)
+  - [4.2 Validate inputs aggressively](#42-validate-inputs-aggressively)
+  - [4.3 Keep tools focused — one tool, one job](#43-keep-tools-focused--one-tool-one-job)
+  - [4.4 Descriptions are your API](#44-descriptions-are-your-api)
+  - [4.5 Return structured, markdown-friendly content](#45-return-structured-markdown-friendly-content)
+  - [4.6 Handle the unhappy path](#46-handle-the-unhappy-path)
+  - [4.7 Mind your secrets](#47-mind-your-secrets)
+  - [4.8 Test with the MCP Inspector](#48-test-with-the-mcp-inspector)
+  - [4.9 Version your server](#49-version-your-server)
+  - [4.10 One server per domain](#410-one-server-per-domain)
+- [5. What about Python?](#5-what-about-python)
+- [6. Bottom line](#6-bottom-line)
 
-## The three primitives
+## 1. The three primitives
 
 Every MCP server exposes one or more of three capabilities:
 
@@ -43,7 +43,7 @@ One server can expose all three. A GitHub MCP server, for example, might have:
 
 Let's break each one down with code.
 
-### Tools — model-controlled actions
+### 1.1 Tools — model-controlled actions
 
 Tools are the powerhouse. The model decides when to call them, and the server executes. They're defined with JSON Schema inputs and return structured content.
 
@@ -77,7 +77,7 @@ A few things to notice:
 
 The wrong tool description will make your server useless because the model won't know when to reach for it. Write them like you're explaining the tool to a new teammate.
 
-### Resources — app-controlled data
+### 1.2 Resources — app-controlled data
 
 Resources are for data the *application* fetches, not the model. Think of them as file-like objects with URIs.
 
@@ -122,7 +122,7 @@ server.resource(
 
 Good uses for resources: database schemas the model should know about, API documentation, configuration files, or any read-only data that provides context for the conversation.
 
-### Prompts — user-controlled templates
+### 1.3 Prompts — user-controlled templates
 
 Prompts are pre-built templates the user invokes explicitly. They're not automatic — the user picks them from a list, like choosing "Draft commit message" from a menu.
 
@@ -150,7 +150,7 @@ server.prompt(
 
 Prompts shine for repetitive workflows. Instead of typing "Please generate a changelog from these commits" every time, you make it a prompt and invoke it with one click.
 
-## Architecture: how the pieces fit
+## 2. Architecture: how the pieces fit
 
 The architecture has three layers:
 
@@ -179,11 +179,11 @@ There are two transports:
 
 For most personal-use servers, stdio is the right call. For anything shared across a team, go HTTP.
 
-## Building a server from scratch
+## 3. Building a server from scratch
 
 Let's build a practical server — a bookmark manager that lets an AI assistant save, search, and retrieve bookmarks. We'll use TypeScript with the official SDK.
 
-### Setup
+### 3.1 Setup
 
 ```bash
 mkdir bookmark-server && cd bookmark-server
@@ -192,7 +192,7 @@ npm install @modelcontextprotocol/sdk zod
 npm install -D @types/node typescript tsx
 ```
 
-### The server
+### 3.2 The server
 
 ```typescript
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -295,9 +295,9 @@ This is a working server. Run it, register it with Claude Desktop, and you can a
 
 But this is a proof of concept. Let's talk about what it takes to make it production-grade.
 
-## The rules for production MCP servers
+## 4. The rules for production MCP servers
 
-### 1. Never write to stdout on stdio servers
+### 4.1 Never write to stdout on stdio servers
 
 This is the most common bug and the hardest to debug. The stdio transport uses stdout for JSON-RPC messages. A stray `console.log` corrupts the protocol and the server silently breaks.
 
@@ -316,7 +316,7 @@ logger.info("Processing bookmark...");
 
 For HTTP servers, stdout logging is fine since it doesn't interfere with HTTP responses.
 
-### 2. Validate inputs aggressively
+### 4.2 Validate inputs aggressively
 
 The model will pass you weird values. It'll send an empty string where you expected a URL. It'll send a number where you expected a string. Zod handles basic validation, but add semantic validation too:
 
@@ -340,7 +340,7 @@ server.tool(
 
 Return errors with `isError: true` instead of throwing. The client handles these gracefully and the model can correct itself.
 
-### 3. Keep tools focused — one tool, one job
+### 4.3 Keep tools focused — one tool, one job
 
 A tool called `manage_project` that creates, updates, deletes, and lists projects is bad. The model has to guess which parameters to pass, and the description becomes a novel.
 
@@ -356,7 +356,7 @@ server.tool("delete_project", "...", { id: z.string() }, ...)
 
 The model is better at choosing the right tool than at figuring out which parameters to send to a Swiss Army knife.
 
-### 4. Descriptions are your API
+### 4.4 Descriptions are your API
 
 The model can't read your source code. It can't read your docs. It has exactly three things to go on: the tool name, the tool description, and the parameter descriptions. Every word counts.
 
@@ -365,7 +365,7 @@ A good description: `"Save a URL as a bookmark with an optional title and tags. 
 
 The good one tells the model *when* to use the tool, not just what it does.
 
-### 5. Return structured, markdown-friendly content
+### 4.5 Return structured, markdown-friendly content
 
 The model understands markdown. Use it:
 
@@ -381,7 +381,7 @@ The model understands markdown. Use it:
 
 Tables, lists, and bold text help the model parse your output and present it cleanly to the user. Don't make the model work harder than it has to.
 
-### 6. Handle the unhappy path
+### 4.6 Handle the unhappy path
 
 The model will call your tools in unexpected ways. A search might return zero results. An API you depend on might be down. A file might not exist.
 
@@ -407,13 +407,13 @@ async ({ query }) => {
 
 Never let an unhandled exception bubble up. The model gets a cryptic error, the user gets confused, and you get a support headache.
 
-### 7. Mind your secrets
+### 4.7 Mind your secrets
 
 MCP servers often need API keys, database credentials, or tokens. Never hardcode them. Never accept them as tool parameters (the conversation history might be logged).
 
 Use environment variables. On stdio servers, the parent process sets them. On HTTP servers, use your platform's secret manager.
 
-### 8. Test with the MCP Inspector
+### 4.8 Test with the MCP Inspector
 
 The [MCP Inspector](https://github.com/modelcontextprotocol/inspector) is a browser-based tool that lets you list tools, call them manually, and inspect responses without needing an AI host.
 
@@ -423,7 +423,7 @@ npx @modelcontextprotocol/inspector node dist/server.js
 
 Test every tool with valid inputs, invalid inputs, and edge cases before connecting it to a real model. The Inspector catches protocol-level issues that `console.error` won't show you.
 
-### 9. Version your server
+### 4.9 Version your server
 
 The `version` field in your server config isn't decorative. When you change tool signatures or add breaking changes, bump the version. Clients can detect version mismatches and handle them gracefully.
 
@@ -434,7 +434,7 @@ const server = new McpServer({
 });
 ```
 
-### 10. One server per domain
+### 4.10 One server per domain
 
 Don't build a monolithic server that manages bookmarks, sends emails, queries databases, and controls your smart home. Split concerns:
 
@@ -444,7 +444,7 @@ Don't build a monolithic server that manages bookmarks, sends emails, queries da
 
 The host connects to multiple servers. Each one should do one thing well. This also makes permissions clearer: you can grant or deny access per server.
 
-## What about Python?
+## 5. What about Python?
 
 The concepts are identical. The Python SDK is equally mature:
 
@@ -462,7 +462,7 @@ async def add_bookmark(url: str, title: str, tags: list[str] | None = None) -> s
 
 FastMCP uses type hints and docstrings for tool definitions — no Zod equivalent needed. The same rules apply: validate inputs, return structured output, log to stderr.
 
-## Bottom line
+## 6. Bottom line
 
 MCP servers are less about the protocol and more about good API design. The protocol handles the plumbing. What makes your server useful is clear descriptions, focused tools, and graceful error handling.
 

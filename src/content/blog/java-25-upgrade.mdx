@@ -10,9 +10,9 @@ Let me walk through the four that matter most, with code you can steal.
 - [2. Compact Object Headers — smaller objects, less GC pressure](#2-compact-object-headers--smaller-objects-less-gc-pressure)
 - [3. Flexible Constructor Bodies — code before super()](#3-flexible-constructor-bodies--code-before-super)
 - [4. Module Import Declarations](#4-module-import-declarations)
-- [What else is in the box?](#what-else-is-in-the-box)
-- [The upgrade path](#the-upgrade-path)
-- [Bottom line](#bottom-line)
+- [5. What else is in the box?](#5-what-else-is-in-the-box)
+- [6. The upgrade path](#6-the-upgrade-path)
+- [7. Bottom line](#7-bottom-line)
 
 ## 1. Scoped Values are finally production-ready
 
@@ -112,7 +112,7 @@ All exported types from the module are available. And yes, it resolves transitiv
 
 When two modules export a class with the same name (like `Date` in both `java.base` and `java.sql`), you add a single explicit import to break the tie. The compiler tells you when this happens, so you're not guessing.
 
-## What else is in the box?
+## 5. What else is in the box?
 
 A few other things worth knowing about:
 
@@ -121,7 +121,7 @@ A few other things worth knowing about:
 - **Generational Shenandoah** brings generational collection to the low-pause GC. If you're on Shenandoah for latency-sensitive workloads, this is a big deal.
 - **Ahead-of-Time Method Profiling** reduces warm-up time by profiling methods in advance and feeding that data to the JIT compiler.
 
-## The upgrade path
+## 6. The upgrade path
 
 Java 25 is an LTS release, so if you're on Java 21 LTS, this is your natural upgrade. If you're on 17... you're two LTS cycles behind and missing virtual threads entirely.
 
@@ -133,7 +133,7 @@ For most projects, the migration is:
 
 The big breaking changes from 21 to 25 are minimal for typical applications. The `Applet` API is gone (good riddance), and `Thread.stop()` has been removed (you shouldn't have been using it). The Security Manager is also deprecated-for-removal, so if you still depend on it, now's the time to migrate.
 
-## Bottom line
+## 7. Bottom line
 
 Java 25 isn't a flashy release. It doesn't have a headliner like virtual threads or pattern matching. But it's packed with quality-of-life improvements that compound: smaller objects, cleaner constructors, less boilerplate, and production-ready Scoped Values.
 
