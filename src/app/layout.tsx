@@ -22,7 +22,10 @@ export const metadata: Metadata = {
   },
   description:
     "Your source for the latest in software engineering, tech news, and industry insights. Deep dives into Java, DevOps, and career advice.",
-  metadataBase: new URL("https://dailyrefactor.com"),
+  metadataBase: new URL("https://dailyrefactor.dev"),
+  icons: {
+    icon: "/favicon.svg",
+  },
   openGraph: {
     title: "DailyRefactor — Software Engineering & Tech Insights",
     description:
