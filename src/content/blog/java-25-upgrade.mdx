@@ -1,0 +1,130 @@
+I've been working with Java for over a decade, and I'll be honest: most version upgrades are a checklist item you do because security patches ran out. Read the release notes, update your `pom.xml`, move on.
+
+Java 25 is different. It's an LTS release, sure — but more importantly, it ships features that actually change how you write code day to day. Not "here's a new incubator module you'll never touch." Real stuff.
+
+Let me walk through the four that matter most, with code you can steal.
+
+## 1. Scoped Values are finally production-ready
+
+If you've ever passed a `User` object through fifteen layers of a web framework just so the DAO layer can log who did what, you know the pain. ThreadLocal worked, but it was leaky, mutable, and didn't play nice with virtual threads.
+
+Scoped Values fix all three problems. They're immutable, bounded to a scope that cleans itself up, and designed to work with virtual threads from the ground up.
+
+```java
+public class Server {
+    public static final ScopedValue<User> LOGGED_IN_USER = ScopedValue.newInstance();
+
+    private void serve(Request request) {
+        User user = authenticateUser(request);
+        ScopedValue.where(LOGGED_IN_USER, user)
+                   .run(() -> restAdapter.processRequest(request));
+    }
+}
+```
+
+Anywhere inside `processRequest` — no matter how deep the call stack — you just call:
+
+```java
+User currentUser = Server.LOGGED_IN_USER.get();
+```
+
+No parameters to thread through. No ThreadLocal cleanup to forget. The scope dies when `run()` completes, and the value goes with it.
+
+This has been incubating since Java 20. In 25, it's done. Use it.
+
+## 2. Compact Object Headers — smaller objects, less GC pressure
+
+This one is invisible but everywhere. The HotSpot JVM now shrinks object headers from 96–128 bits down to 64 bits on 64-bit architectures.
+
+What does that mean in practice? Every single object in your heap — every `String`, every `HashMap$Node`, every `Optional` — just got smaller. If your app has millions of objects (and it does), the memory savings add up fast.
+
+You don't change a line of code. You upgrade the JDK, restart, and the JVM uses less heap. Smaller objects mean less GC pressure, which means fewer pauses. For free.
+
+Oracle's benchmarks show 10–20% heap reduction on typical enterprise workloads. That's the kind of improvement you'd normally need a refactoring sprint to achieve.
+
+## 3. Flexible Constructor Bodies — code before `super()`
+
+This one is small but satisfying. For twenty-five years, `super()` or `this()` had to be the absolute first statement in any constructor. No exceptions. You couldn't even validate parameters first:
+
+```java
+// Before Java 25 — this didn't compile
+public PositiveBigInteger(long value) {
+    if (value <= 0) throw new IllegalArgumentException(); // ❌
+    super(value);
+}
+```
+
+You had to inline the validation into a static method, which was ugly:
+
+```java
+// The old workaround
+public PositiveBigInteger(long value) {
+    super(validatePositive(value)); // Ugly helper method
+}
+```
+
+Java 25 finally lets you write statements before `super()`:
+
+```java
+// Java 25 — this just works
+public PositiveBigInteger(long value) {
+    if (value <= 0) {
+        throw new IllegalArgumentException("Value must be positive: " + value);
+    }
+    super(value);
+}
+```
+
+It's a small thing, but it eliminates an entire category of pointless helper methods. The kind of papercut you stop noticing until someone finally fixes it.
+
+## 4. Module Import Declarations
+
+Remember when Java added `var` and suddenly your code got shorter without losing clarity? Module imports hit the same sweet spot.
+
+Instead of importing a dozen classes from `java.base`:
+
+```java
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+// ... ad nauseam
+```
+
+You write one line:
+
+```java
+import module java.base;
+```
+
+All exported types from the module are available. And yes, it resolves transitive dependencies — if you `import module java.sql`, you get `java.xml` for free.
+
+When two modules export a class with the same name (like `Date` in both `java.base` and `java.sql`), you add a single explicit import to break the tie. The compiler tells you when this happens, so you're not guessing.
+
+## What else is in the box?
+
+A few other things worth knowing about:
+
+- **Structured Concurrency** (5th preview) is getting close. If you're managing parallel tasks with `ExecutorService` today, this is the eventual replacement. Think "try-with-resources for threads."
+- **Stable Values** (preview, renamed to Lazy Constants in Java 26) let you define values that initialize once on first access, then get JIT-optimized like compile-time constants.
+- **Generational Shenandoah** brings generational collection to the low-pause GC. If you're on Shenandoah for latency-sensitive workloads, this is a big deal.
+- **Ahead-of-Time Method Profiling** reduces warm-up time by profiling methods in advance and feeding that data to the JIT compiler.
+
+## The upgrade path
+
+Java 25 is an LTS release, so if you're on Java 21 LTS, this is your natural upgrade. If you're on 17... you're two LTS cycles behind and missing virtual threads entirely.
+
+For most projects, the migration is:
+1. Update your JDK distribution
+2. Update `maven.compiler.source` and `maven.compiler.target` to `25`
+3. Run your tests
+4. Deploy
+
+The big breaking changes from 21 to 25 are minimal for typical applications. The `Applet` API is gone (good riddance), and `Thread.stop()` has been removed (you shouldn't have been using it). The Security Manager is also deprecated-for-removal, so if you still depend on it, now's the time to migrate.
+
+## Bottom line
+
+Java 25 isn't a flashy release. It doesn't have a headliner like virtual threads or pattern matching. But it's packed with quality-of-life improvements that compound: smaller objects, cleaner constructors, less boilerplate, and production-ready Scoped Values.
+
+If you're maintaining a real application and you're still on 21, it's time. The upgrade is low-risk and the memory savings alone justify it.

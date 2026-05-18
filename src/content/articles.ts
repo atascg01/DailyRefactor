@@ -66,6 +66,23 @@ export const articles: ArticleMeta[] = [
       role: "Senior Software Engineer",
     },
   },
+  {
+    id: 4,
+    slug: "java-25-upgrade",
+    title: "Java 25 is here — and it's actually worth upgrading for",
+    excerpt:
+      "Scoped Values are production-ready, object headers just got smaller, and you can finally write code before super(). Here's why Java 25 is the LTS release you shouldn't skip.",
+    category: "Java",
+    image:
+      "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80",
+    date: "May 18, 2026",
+    readTime: "8 min read",
+    author: {
+      name: "Andres Tascon",
+      avatar: "/images/pic_photo.jpg",
+      role: "Senior Software Engineer @ Oracle",
+    },
+  },
 ];
 
 export function getArticle(id: number): ArticleMeta | undefined {
