@@ -1,18 +1,40 @@
 "use client";
 
+import { useState } from "react";
+
 interface ShareSectionProps {
   title: string;
-  articleId: number;
+  slug: string;
 }
 
-export default function ShareSection({ title, articleId }: ShareSectionProps) {
+export default function ShareSection({ title, slug }: ShareSectionProps) {
+  const [copied, setCopied] = useState(false);
+  const url = `https://dailyrefactor.dev/blog/${slug}`;
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback for older browsers
+      const input = document.createElement("input");
+      input.value = url;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand("copy");
+      document.body.removeChild(input);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
   return (
     <div className="border-t border-[var(--border)] pt-8">
       <h3 className="text-lg font-semibold mb-4">Share this article</h3>
       <div className="flex gap-2">
         <button
           onClick={() => {
-            const url = `https://dailyrefactor.com/blog/${articleId}`;
             window.open(
               `https://twitter.com/intent/tweet?text=${encodeURIComponent(title)}&url=${encodeURIComponent(url)}`,
               "_blank"
@@ -26,15 +48,24 @@ export default function ShareSection({ title, articleId }: ShareSectionProps) {
           </svg>
         </button>
         <button
-          onClick={() => {
-            navigator.clipboard.writeText(`https://dailyrefactor.com/blog/${articleId}`);
-          }}
-          className="p-2.5 rounded-lg border border-[var(--border)] hover:bg-[var(--accent)] transition-colors"
+          onClick={handleCopy}
+          className="p-2.5 rounded-lg border border-[var(--border)] hover:bg-[var(--accent)] transition-colors relative"
           aria-label="Copy link"
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-          </svg>
+          {copied ? (
+            <svg className="w-4 h-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+            </svg>
+          )}
+          {copied && (
+            <span className="absolute -top-8 left-1/2 -translate-x-1/2 text-xs bg-[var(--foreground)] text-[var(--background)] px-2 py-1 rounded whitespace-nowrap">
+              Copied!
+            </span>
+          )}
         </button>
       </div>
     </div>

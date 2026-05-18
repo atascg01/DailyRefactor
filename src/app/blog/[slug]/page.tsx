@@ -101,7 +101,7 @@ export default async function BlogPost({
       </article>
 
       {/* Share */}
-      <ShareSection title={article.title} articleId={article.id} />
+      <ShareSection title={article.title} slug={article.slug} />
     </div>
   );
 }
