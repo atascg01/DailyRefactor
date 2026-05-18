@@ -1,0 +1,155 @@
+ACID is one of those terms that gets thrown around in interviews and architecture docs, but most developers only half-remember what it means. Let me fix that.
+
+ACID stands for Atomicity, Consistency, Isolation, and Durability — four properties that guarantee database transactions are reliable, even when everything goes wrong. A crash, a power failure, two users hitting the same row at the same time — ACID is the reason your data doesn't turn into garbage.
+
+## Table of Contents
+
+- [1. Atomicity — all or nothing](#1-atomicity--all-or-nothing)
+- [2. Consistency — only valid states](#2-consistency--only-valid-states)
+- [3. Isolation — transactions don't interfere](#3-isolation--transactions-dont-interfere)
+- [4. Durability — committed means committed](#4-durability--committed-means-committed)
+- [5. Putting it all together: a bank transfer](#5-putting-it-all-together-a-bank-transfer)
+- [6. When ACID breaks down](#6-when-acid-breaks-down)
+- [7. Bottom line](#7-bottom-line)
+
+## 1. Atomicity — all or nothing
+
+A transaction is atomic if it either completes entirely or doesn't happen at all. No partial states. No "halfway done."
+
+If you're transferring money from account A to account B and the database crashes after debiting A but before crediting B, atomicity guarantees the debit gets rolled back. You never end up with money that just disappeared.
+
+```sql
+BEGIN;
+
+UPDATE accounts SET balance = balance - 100 WHERE id = 'A';
+-- 💥 Database crashes here
+UPDATE accounts SET balance = balance + 100 WHERE id = 'B';
+
+COMMIT;
+```
+
+Without atomicity, account A is $100 short and B never got paid. With atomicity, the `BEGIN`...`COMMIT` block either fully succeeds or fully rolls back — the crash means the whole transaction is aborted, and A's balance is restored.
+
+**The rule: a transaction is a single unit of work. It either all happens or none of it happens.**
+
+## 2. Consistency — only valid states
+
+Consistency means a transaction takes the database from one valid state to another. All constraints — primary keys, foreign keys, check constraints, NOT NULL — must hold after the transaction commits.
+
+```sql
+-- Check constraint: balance can never go below zero
+ALTER TABLE accounts ADD CONSTRAINT positive_balance CHECK (balance >= 0);
+
+-- This transaction will be rejected
+BEGIN;
+UPDATE accounts SET balance = balance - 500 WHERE id = 'A' AND balance = 200;
+-- Fails: resulting balance would be -300, violates the constraint
+COMMIT;
+```
+
+The key insight: consistency isn't something the transaction *does* — it's something the database *enforces*. Your constraints define what "valid" means, and the database won't let a transaction commit if it would leave things in an invalid state.
+
+**The rule: after a transaction, every rule and constraint in the database must still hold.**
+
+## 3. Isolation — transactions don't interfere
+
+Isolation means concurrent transactions behave as if they ran one after the other, even if they actually ran at the same time. Each transaction sees a consistent snapshot and can't see the intermediate state of other transactions.
+
+```sql
+-- Transaction 1: Reading account balance
+BEGIN;
+SELECT balance FROM accounts WHERE id = 'A';  -- Returns 500
+-- Transaction 2 updates A's balance to 400 here
+SELECT balance FROM accounts WHERE id = 'A';  -- Still returns 500 (not 400)
+COMMIT;
+```
+
+Without isolation, Transaction 1 would see a different balance on the second read — a "phantom read" caused by Transaction 2's uncommitted change. Isolation prevents that.
+
+Databases offer isolation levels that let you trade strictness for performance:
+
+| Level                  | Dirty Read | Non-Repeatable Read | Phantom Read |
+| ---------------------- | ---------- | ------------------- | ------------ |
+| Read Uncommitted       | Yes        | Yes                 | Yes           |
+| Read Committed         | No         | Yes                 | Yes           |
+| Repeatable Read        | No         | No                  | Yes           |
+| Serializable           | No         | No                  | No            |
+
+Most production databases default to **Read Committed**. If you need stronger guarantees (bank transfers, inventory management), you bump it up.
+
+**The rule: concurrent transactions must not interfere with each other. Each sees a snapshot as if it ran alone.**
+
+## 4. Durability — committed means committed
+
+Durability guarantees that once a transaction commits, it survives crashes, power failures, and anything short of the data center catching fire. The data is written to non-volatile storage before the commit returns success.
+
+```sql
+BEGIN;
+UPDATE accounts SET balance = balance - 100 WHERE id = 'A';
+UPDATE accounts SET balance = balance + 100 WHERE id = 'B';
+COMMIT; -- Once you see "COMMIT", it's permanent
+-- 💥 Even if the server explodes right now,
+-- the data is safe on disk (or replicated)
+```
+
+The database uses a **write-ahead log (WAL)**. Before any change hits the data files, it's recorded in the WAL. If the database crashes, it replays the WAL on recovery to restore all committed transactions and roll back any that didn't finish.
+
+**The rule: once a commit succeeds, the data is permanent — even through system failures.**
+
+## 5. Putting it all together: a bank transfer
+
+Let's walk through a single bank transfer and see how each ACID property protects it.
+
+You're transferring $500 from Alice (account A, balance $1,200) to Bob (account B, balance $300).
+
+```sql
+BEGIN;
+
+-- Step 1: Debit Alice's account
+UPDATE accounts SET balance = balance - 500 WHERE id = 'A';
+
+-- Step 2: Credit Bob's account
+UPDATE accounts SET balance = balance + 500 WHERE id = 'B';
+
+-- Step 3: Log the transfer
+INSERT INTO transfer_log (from_account, to_account, amount, created_at)
+VALUES ('A', 'B', 500, NOW());
+
+COMMIT;
+```
+
+Here's how each ACID property keeps this safe:
+
+**Atomicity**: If the database crashes between Step 1 and Step 2, the entire transaction rolls back. Alice keeps her $1,200. No money vanishes into the void. Without atomicity, Alice loses $500 and Bob gets nothing — the worst possible outcome.
+
+**Consistency**: The `CHECK (balance >= 0)` constraint ensures Alice can't go into negative territory. If Alice only had $300 and tried to transfer $500, the database rejects the entire transaction. The invariant "total money in the system stays the same" is preserved: $1,200 + $300 = $1,500 before, $700 + $800 = $1,500 after.
+
+**Isolation**: While this transfer is happening, another transaction trying to read Alice's balance won't see the intermediate state where $500 has been debited but not yet credited to Bob. They see either the before-state ($1,200) or the after-state ($700) — never the in-between.
+
+**Durability**: Once the `COMMIT` returns, the transfer is permanent. Even if the database server loses power one millisecond later, Alice's new balance ($700) and Bob's new balance ($800) survive. The WAL ensures the transfer record is replayed on recovery.
+
+All four properties work together. Remove any one, and the transfer breaks:
+- No atomicity → partial debit with no credit
+- No consistency → negative balances possible
+- No isolation → other transactions see half-complete transfers
+- No durability → committed transfers lost on crash
+
+That's why ACID is a package deal. Any database that claims to be "ACID-compliant" guarantees all four. PostgreSQL, MySQL with InnoDB, Oracle, SQL Server — they all have this covered.
+
+## 6. When ACID breaks down
+
+ACID isn't free. Serializable isolation kills throughput under high concurrency. Two-phase commit across distributed databases is slow and fragile. That's why NoSQL databases (Cassandra, DynamoDB, MongoDB) often sacrifice some ACID properties for performance and availability.
+
+The CAP theorem makes this explicit: in a distributed system, you can have at most two of Consistency, Availability, and Partition tolerance. Most NoSQL databases chose Availability + Partition tolerance, sacrificing strong consistency.
+
+But here's the thing — for financial data, inventory, and anything where correctness matters more than raw throughput, ACID is non-negotiable. You don't want "eventually consistent" bank balances.
+
+If you need ACID guarantees across distributed services, look into **sagas** (compensating transactions) or use a database that supports distributed transactions (PostgreSQL with `PREPARE TRANSACTION`, or something like CockroachDB). The trade-offs are real, but the tools exist.
+
+## 7. Bottom line
+
+ACID isn't academic trivia — it's the reason your bank doesn't lose money, your inventory doesn't go negative, and your database doesn't corrupt itself under concurrent load.
+
+**Atomicity**: All or nothing.**Consistency**: Only valid states.**Isolation**: No interference between transactions.**Durability**: Committed means permanent.
+
+If you're working with relational databases, you're already using ACID every day. Understanding *why* it works means you can make better decisions about when to enforce it, when to relax it, and when something else entirely (like eventual consistency) is the right call.

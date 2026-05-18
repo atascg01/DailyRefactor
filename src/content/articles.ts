@@ -100,6 +100,23 @@ export const articles: ArticleMeta[] = [
       role: "Senior Software Engineer @ Oracle",
     },
   },
+  {
+    id: 6,
+    slug: "acid-transactions",
+    title: "ACID: Four letters that keep your data safe",
+    excerpt:
+      "A practical guide to Atomicity, Consistency, Isolation, and Durability — with SQL examples and a bank transfer walkthrough showing all four properties in action.",
+    category: "Backend",
+    image:
+      "https://images.unsplash.com/photo-1460925895917-afdab827c52f?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80",
+    date: "May 4, 2026",
+    readTime: "10 min read",
+    author: {
+      name: "Andres Tascon",
+      avatar: "/images/pic_photo.jpg",
+      role: "Senior Software Engineer @ Oracle",
+    },
+  },
 ];
 
 export function getArticle(id: number): ArticleMeta | undefined {
