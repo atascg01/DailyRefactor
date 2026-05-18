@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 interface ArticleCardProps {
-  id: string | number;
+  slug: string;
   title: string;
   excerpt: string;
   category: string;
@@ -15,9 +15,9 @@ interface ArticleCardProps {
   };
 }
 
-export default function ArticleCard({ id, title, excerpt, category, date, readTime, image, author }: ArticleCardProps) {
+export default function ArticleCard({ slug, title, excerpt, category, date, readTime, image, author }: ArticleCardProps) {
   return (
-    <Link href={`/blog/${id}`} className="group block h-full">
+    <Link href={`/blog/${slug}`} className="group block h-full">
       <article
         className="relative h-full rounded-2xl overflow-hidden border border-[var(--border)] 
                     bg-[var(--card)] hover:border-blue-500/30 transition-all duration-300

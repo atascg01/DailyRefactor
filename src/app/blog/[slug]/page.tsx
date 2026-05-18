@@ -2,20 +2,20 @@ import { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { getArticle, articles } from "@/content/articles";
+import { getArticleBySlug, articles } from "@/content/articles";
 import ShareSection from "@/components/ShareSection";
 
 export function generateStaticParams() {
-  return articles.map((a) => ({ id: String(a.id) }));
+  return articles.map((a) => ({ slug: a.slug }));
 }
 
 export async function generateMetadata({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
-  const { id } = await params;
-  const article = getArticle(parseInt(id));
+  const { slug } = await params;
+  const article = getArticleBySlug(slug);
   if (!article) return { title: "Not Found" };
   return {
     title: article.title,
@@ -31,11 +31,10 @@ export async function generateMetadata({
 export default async function BlogPost({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  params: Promise<{ slug: string }>;
 }) {
-  const { id } = await params;
-  const articleId = parseInt(id);
-  const article = getArticle(articleId);
+  const { slug } = await params;
+  const article = getArticleBySlug(slug);
 
   if (!article) {
     notFound();

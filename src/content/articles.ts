@@ -88,3 +88,7 @@ export const articles: ArticleMeta[] = [
 export function getArticle(id: number): ArticleMeta | undefined {
   return articles.find((a) => a.id === id);
 }
+
+export function getArticleBySlug(slug: string): ArticleMeta | undefined {
+  return articles.find((a) => a.slug === slug);
+}
