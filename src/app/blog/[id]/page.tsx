@@ -3,13 +3,19 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getArticle, articles } from "@/content/articles";
+import ShareSection from "@/components/ShareSection";
 
 export function generateStaticParams() {
   return articles.map((a) => ({ id: String(a.id) }));
 }
 
-export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
-  const article = getArticle(parseInt(params.id));
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  const article = getArticle(parseInt(id));
   if (!article) return { title: "Not Found" };
   return {
     title: article.title,
@@ -22,8 +28,13 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   };
 }
 
-export default async function BlogPost({ params }: { params: { id: string } }) {
-  const articleId = parseInt(params.id);
+export default async function BlogPost({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const articleId = parseInt(id);
   const article = getArticle(articleId);
 
   if (!article) {
@@ -91,34 +102,7 @@ export default async function BlogPost({ params }: { params: { id: string } }) {
       </article>
 
       {/* Share */}
-      <div className="border-t border-[var(--border)] pt-8">
-        <h3 className="text-lg font-semibold mb-4">Share this article</h3>
-        <div className="flex gap-2">
-          <button
-            onClick={() => {
-              const url = `https://dailyrefactor.com/blog/${article.id}`;
-              window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(article.title)}&url=${encodeURIComponent(url)}`, "_blank");
-            }}
-            className="p-2.5 rounded-lg border border-[var(--border)] hover:bg-[var(--accent)] transition-colors"
-            aria-label="Share on X"
-          >
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-            </svg>
-          </button>
-          <button
-            onClick={() => {
-              navigator.clipboard.writeText(`https://dailyrefactor.com/blog/${article.id}`);
-            }}
-            className="p-2.5 rounded-lg border border-[var(--border)] hover:bg-[var(--accent)] transition-colors"
-            aria-label="Copy link"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-            </svg>
-          </button>
-        </div>
-      </div>
+      <ShareSection title={article.title} articleId={article.id} />
     </div>
   );
 }
