@@ -67,7 +67,6 @@ body {
   border-radius: 0.75rem;
   overflow: hidden;
   border: 1px solid var(--border);
-  background: #0d1117;
 }
 
 [data-rehype-pretty-code-figure] pre {
@@ -76,6 +75,7 @@ body {
   overflow-x: auto;
   font-size: 0.875rem;
   line-height: 1.7;
+  border-radius: 0;
 }
 
 [data-rehype-pretty-code-figure] code {
