@@ -409,6 +409,72 @@ const quizData: Record<string, QuizData> = {
     ],
   },
 
+  "java-immutability": {
+    title: "Test Your Understanding",
+    questions: [
+      {
+        question: "What does it mean for an object to be immutable in Java?",
+        options: [
+          "Its fields are private, but setters can still modify them",
+          "Its state cannot be changed after the object is constructed",
+          "It can only be accessed by one thread at a time",
+          "It automatically serializes to JSON without configuration",
+        ],
+        correctIndex: 1,
+        explanation:
+          "An immutable object's state is fixed at construction time and can never change. This means no setters, no methods that modify fields, and no way for external code to alter the object's data. String is the classic example — every method that 'modifies' a String actually returns a new String.",
+      },
+      {
+        question: "Which of these is NOT one of the five rules for making a class immutable?",
+        options: [
+          "Don't provide setters",
+          "Make the class final",
+          "Use synchronized blocks on all getters",
+          "Defensive copy mutable fields on the way in and out",
+        ],
+        correctIndex: 2,
+        explanation:
+          "Immutable objects don't need synchronization because their state never changes — that's one of the main benefits! The five rules are: no setters, final class, final fields, private fields, and defensive copying of mutable references. Thread safety comes for free with immutability.",
+      },
+      {
+        question: "Why are Strings immutable in Java?",
+        options: [
+          "It's a historical accident with no real purpose",
+          "Security (prevents tampering), string pool sharing, thread safety, and hashcode caching",
+          "The JVM can't allocate mutable text efficiently",
+          "The Java Language Specification requires all primitive wrappers to be immutable, and String is a wrapper",
+        ],
+        correctIndex: 1,
+        explanation:
+          "String immutability serves multiple practical purposes: security (a malicious library can't modify file paths or credentials between validation and use), the string pool (shared interned strings would break if mutable), inherent thread safety, and reliable hashcode caching (String caches its hash for fast HashMap lookups). It's one of the best design decisions in the Java platform.",
+      },
+      {
+        question: "What's the key difference between Collections.unmodifiableList() and List.copyOf()?",
+        options: [
+          "unmodifiableList() works in Java 8; List.copyOf() doesn't",
+          "unmodifiableList() returns a view — if the backing list changes, the 'unmodifiable' list reflects those changes. List.copyOf() creates an independent immutable copy.",
+          "List.copyOf() is faster because it uses SIMD instructions",
+          "There is no difference; they're aliases for the same implementation",
+        ],
+        correctIndex: 1,
+        explanation:
+          "This is the most common pitfall with unmodifiableList(): it's a wrapper/view, not a snapshot. If someone modifies the original backing list, the 'unmodifiable' wrapper sees the changes. List.copyOf() (Java 10+) eagerly copies the data into a new immutable list, guaranteeing independence from the source. If the source is already immutable, copyOf() returns the same reference — an O(1) optimization.",
+      },
+      {
+        question: "You create an immutable List<Car> with List.of(car1, car2). Car has a setYear() method. Is the list truly immutable?",
+        options: [
+          "Yes — List.of() guarantees complete immutability",
+          "The list structure is immutable (can't add/remove/replace), but the Car objects inside can still be mutated if Car is mutable",
+          "No — List.of() doesn't actually prevent mutation",
+          "Yes, but only if you also wrap each Car with Collections.unmodifiableObject()",
+        ],
+        correctIndex: 1,
+        explanation:
+          "List.of() and List.copyOf() make the collection itself immutable — you can't add, remove, or replace elements. But they don't make the elements immutable. If Car has a setYear() method, calling car1.setYear(2023) will mutate the Car inside the 'immutable' list. True deep immutability requires both: an immutable collection of immutable elements. This is where Java records shine — they're immutable by default.",
+      },
+    ],
+  },
+
   "acid-transactions": {
     title: "Test Your Understanding",
     questions: [

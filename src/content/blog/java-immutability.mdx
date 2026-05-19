@@ -1,0 +1,440 @@
+import Quiz from "@/components/Quiz";
+
+<p>Immutability is one of those concepts that sounds academic until the day you spend four hours debugging a bug caused by someone modifying an object you didn't expect to change. In this article, I'll explain what immutability actually means in Java, how to enforce it in your own classes, why String works the way it does, and all the different ways to make a List immutable — with their tradeoffs.</p>
+
+## Table of Contents
+
+- [1. What Is Immutability?](#1-what-is-immutability)
+- [2. How to Make an Object Immutable](#2-how-to-make-an-object-immutable)
+  - [2.1 The Five Rules](#21-the-five-rules)
+  - [2.2 Example: A Mutable Car](#22-example-a-mutable-car)
+  - [2.3 Example: Making It Immutable](#23-example-making-it-immutable)
+- [3. Strings: Java's Poster Child for Immutability](#3-strings-javas-poster-child-for-immutability)
+  - [3.1 Why Strings Are Immutable](#31-why-strings-are-immutable)
+  - [3.2 The String Pool](#32-the-string-pool)
+  - [3.3 The "Strings Are Mutable" Trap](#33-the-strings-are-mutable-trap)
+- [4. Making Collections Immutable](#4-making-collections-immutable)
+  - [4.1 List.of() and Set.of() (Java 9+)](#41-listof-and-setof-java-9)
+  - [4.2 Collections.unmodifiableList()](#42-collectionsunmodifiablelist)
+  - [4.3 List.copyOf() (Java 10+)](#43-listcopyof-java-10)
+  - [4.4 Guava's ImmutableList](#44-guavas-immutablelist)
+  - [4.5 Defensive Copying](#45-defensive-copying)
+  - [4.6 Comparison Table](#46-comparison-table)
+- [5. Records: Immutability by Default](#5-records-immutability-by-default)
+- [6. Why Bother? The Benefits](#6-why-bother-the-benefits)
+- [7. Good Practices & Pitfalls](#7-good-practices--pitfalls)
+- [8. Conclusion](#8-conclusion)
+
+## 1. What Is Immutability?
+
+An object is <strong>immutable</strong> if its state cannot be changed after it's created. Once you construct it, every field is fixed forever. No setters. No mutating methods. The object is, for the rest of its lifetime, exactly what you built.
+
+Think of it like a stone tablet vs a whiteboard. A mutable object is the whiteboard — anyone with a reference can erase and rewrite. An immutable object is the stone tablet — chisel it once and it stays that way.
+
+```java
+// Mutable
+MutablePerson p = new MutablePerson("Alice", 30);
+p.setAge(31);  // ✅ allowed — state changed
+
+// Immutable
+ImmutablePerson p = new ImmutablePerson("Alice", 30);
+// p.setAge(31);  // ❌ doesn't compile — no setter exists
+```
+
+The key insight: immutability isn't just about missing setters. It's a guarantee that <em>nothing</em> — not your code, not a library, not a different thread — can change this object. That guarantee is what makes immutable objects so valuable in concurrent programming, caching, and reasoning about code.
+
+## 2. How to Make an Object Immutable
+
+### 2.1 The Five Rules
+
+Making a class immutable follows a clear recipe. Brian Goetz lays it out in <em>Java Concurrency in Practice</em>, and it hasn't changed:
+
+1. <strong>Don't provide setters</strong> — no methods that modify the object's state.
+2. <strong>Make the class final</strong> — prevent subclasses from adding mutable behavior.
+3. <strong>Make all fields final</strong> — the compiler enforces that they're assigned exactly once.
+4. <strong>Make all fields private</strong> — prevent direct access from outside the class.
+5. <strong>Don't leak mutable references</strong> — if a field is a mutable object (like a Date or a List), never return it directly. Return a copy or an immutable wrapper.
+
+### 2.2 Example: A Mutable Car
+
+```java
+public class MutableCar {
+    private String model;
+    private int year;
+    private List<String> previousOwners;
+
+    public MutableCar(String model, int year, List<String> previousOwners) {
+        this.model = model;
+        this.year = year;
+        this.previousOwners = previousOwners; // ⚠️ stores the caller's reference
+    }
+
+    public void setModel(String model) { this.model = model; }    // ⚠️ setter
+    public void setYear(int year) { this.year = year; }           // ⚠️ setter
+    public String getModel() { return model; }
+    public int getYear() { return year; }
+    public List<String> getPreviousOwners() { return previousOwners; } // ⚠️ leaks mutable list
+}
+```
+
+This class has three problems:
+- Setters let anyone change model and year.
+- The constructor stores the caller's List reference — the caller can modify that list after construction and the Car's state changes.
+- `getPreviousOwners()` returns the internal List directly — the caller can mutate it.
+
+```java
+List<String> owners = new ArrayList<>(List.of("Alice"));
+MutableCar car = new MutableCar("Civic", 2020, owners);
+
+owners.add("Bob");                      // 💥 modifies the car's internal state!
+car.getPreviousOwners().clear();         // 💥 also modifies internal state!
+```
+
+### 2.3 Example: Making It Immutable
+
+```java
+public final class ImmutableCar {  // Rule 2: final class
+    private final String model;    // Rules 3 & 4: private final
+    private final int year;
+    private final List<String> previousOwners;
+
+    public ImmutableCar(String model, int year, List<String> previousOwners) {
+        this.model = model;
+        this.year = year;
+        // Rule 5: defensive copy on the way in
+        this.previousOwners = List.copyOf(previousOwners);
+    }
+
+    // Rule 1: no setters — only getters
+
+    public String getModel() { return model; }
+    public int getYear() { return year; }
+
+    // Rule 5: return an immutable view
+    public List<String> getPreviousOwners() {
+        return previousOwners; // already immutable via List.copyOf
+    }
+
+    // Factory for creating modified copies (instead of setters)
+    public ImmutableCar withYear(int newYear) {
+        return new ImmutableCar(this.model, newYear, this.previousOwners);
+    }
+
+    public ImmutableCar withAddedOwner(String newOwner) {
+        List<String> newOwners = new ArrayList<>(this.previousOwners);
+        newOwners.add(newOwner);
+        return new ImmutableCar(this.model, this.year, newOwners);
+    }
+}
+```
+
+Notice the pattern: instead of setters, we provide <strong>wither</strong> methods that return a <em>new</em> object with the modified field. The original object never changes. This is the functional-programming style that underpins immutable design.
+
+## 3. Strings: Java's Poster Child for Immutability
+
+`String` is the most famous immutable class in Java. Every `String` object, once created, can never change. This is so fundamental that most Java developers don't think about it — until it bites them.
+
+### 3.1 Why Strings Are Immutable
+
+Strings are immutable for several reasons, all of them practical:
+
+<ul>
+<li><strong>Security:</strong> Strings carry sensitive data — file paths, network addresses, database credentials. If strings were mutable, a library could modify a file path between the security check and the actual file open (a TOCTOU attack).</li>
+<li><strong>The String Pool:</strong> Java interns string literals into a shared pool. If one reference could mutate a pooled string, <em>every</em> reference to that string would see the change — chaos.</li>
+<li><strong>Thread Safety:</strong> Immutable objects are inherently thread-safe. No synchronization needed. Given how often strings are passed between threads (logging, request handling, message passing), this matters.</li>
+<li><strong>HashCode Caching:</strong> String caches its hashcode after the first computation. Since the string never changes, the hashcode is stable forever — making String an ideal HashMap key.</li>
+</ul>
+
+### 3.2 The String Pool
+
+```java
+String a = "hello";       // pooled literal
+String b = "hello";       // same pooled object
+String c = new String("hello"); // new object, NOT in the pool
+
+System.out.println(a == b);       // true  — same reference from pool
+System.out.println(a == c);       // false — different object
+System.out.println(a.equals(c));  // true  — same content
+```
+
+The string pool is a JVM-internal cache of string literals. When you write `"hello"`, the JVM checks if that string already exists in the pool. If so, it reuses it. This saves memory — no need for 10,000 copies of `"id"` in a JSON processing app.
+
+You can manually intern a string with `c.intern()`, but don't abuse this: the pool lives in the (limited) string constant pool region of the heap, and interning dynamically-created strings can cause memory pressure.
+
+### 3.3 The "Strings Are Mutable" Trap
+
+New Java developers often write code like this and get confused:
+
+```java
+String s = "hello";
+s.toUpperCase();
+System.out.println(s);  // "hello" — not "HELLO"!
+```
+
+Every method on String that "changes" it — `toUpperCase()`, `substring()`, `replace()`, `concat()` — returns a <strong>new</strong> String. The original is untouched. You need to capture the return value:
+
+```java
+String s = "hello";
+s = s.toUpperCase();   // reassign the variable
+System.out.println(s);  // "HELLO"
+```
+
+This isn't a quirk; it's the contract. String methods are side-effect-free. Once you internalize this, you stop making the mistake.
+
+## 4. Making Collections Immutable
+
+Collections are where immutability gets interesting. A `List<String>` of immutable strings is <em>not itself immutable</em>. You need to make the <strong>collection</strong> immutable too. Java gives you several options, each with different tradeoffs.
+
+### 4.1 List.of() and Set.of() (Java 9+)
+
+The simplest way to create a small, fixed-content immutable list:
+
+```java
+List<String> names = List.of("Alice", "Bob", "Charlie");
+// names.add("Dave");  // ❌ UnsupportedOperationException
+// names.set(0, "X");  // ❌ UnsupportedOperationException
+// names.clear();      // ❌ UnsupportedOperationException
+```
+
+<ul>
+<li><strong>✅ Pros:</strong> Clean syntax, null-hostile (rejects nulls), truly immutable.</li>
+<li><strong>❌ Cons:</strong> Fixed content — can't create from an existing collection without copying first. Limited to 10 elements with the overloaded factory; 11+ requires the varargs overload which has worse performance. The resulting list is a special internal implementation, not ArrayList or LinkedList.</li>
+</ul>
+
+For a `List<Car>` with `List.of()`:
+
+```java
+Car car1 = new Car("Civic", 2020);
+Car car2 = new Car("Corolla", 2022);
+List<Car> cars = List.of(car1, car2);
+// cars.add(new Car(...));      // ❌ can't modify the list
+// car1.setYear(2023);           // ⚠️ BUT the Car itself might be mutable!
+```
+
+This reveals a crucial distinction: `List.of()` makes the <strong>collection</strong> immutable, but not the <strong>elements</strong>. If Car is mutable, the objects inside the list can still change. True deep immutability requires the elements themselves to be immutable.
+
+### 4.2 Collections.unmodifiableList()
+
+Wraps an existing list in an unmodifiable view:
+
+```java
+List<String> mutableList = new ArrayList<>();
+mutableList.add("Alice");
+mutableList.add("Bob");
+
+List<String> unmodifiable = Collections.unmodifiableList(mutableList);
+// unmodifiable.add("Charlie");  // ❌ UnsupportedOperationException
+// unmodifiable.remove(0);       // ❌ UnsupportedOperationException
+
+mutableList.add("Charlie");       // ⚠️ THIS WORKS — and changes the "unmodifiable" view!
+System.out.println(unmodifiable); // [Alice, Bob, Charlie]
+```
+
+<ul>
+<li><strong>✅ Pros:</strong> Wraps without copying — fast, memory-efficient.</li>
+<li><strong>❌ Cons:</strong> It's a <strong>view</strong>, not a snapshot. If the original list changes, the "unmodifiable" list reflects those changes. This is the most common pitfall — developers pass around the wrapper thinking the data is frozen, but someone modifies the backing list and everything breaks.</li>
+<li><strong>❌ Cons:</strong> If the original list reference is discarded and the wrapper is the only reference, it is effectively immutable — but this relies on discipline, not enforcement.</li>
+</ul>
+
+### 4.3 List.copyOf() (Java 10+)
+
+Creates a truly independent, immutable copy:
+
+```java
+List<String> original = new ArrayList<>(List.of("Alice", "Bob"));
+List<String> copy = List.copyOf(original);
+// copy.add("Charlie");  // ❌ UnsupportedOperationException
+
+original.add("Charlie");         // modifies the original
+System.out.println(original);    // [Alice, Bob, Charlie]
+System.out.println(copy);        // [Alice, Bob] — unchanged!
+```
+
+<ul>
+<li><strong>✅ Pros:</strong> Guaranteed independence from the source. Null-hostile. If the input is already an immutable list, it returns the same reference (O(1) identity check) — smart optimization.</li>
+<li><strong>❌ Cons:</strong> Copies the data (O(n)), so it has a memory and time cost. Like `List.of()`, it doesn't make elements immutable.</li>
+</ul>
+
+### 4.4 Guava's ImmutableList
+
+If you're using Google Guava, `ImmutableList` has been the gold standard since before Java 9:
+
+```java
+import com.google.common.collect.ImmutableList;
+
+ImmutableList<String> names = ImmutableList.of("Alice", "Bob", "Charlie");
+ImmutableList<String> copied = ImmutableList.copyOf(existingCollection);
+
+// Builder pattern for incremental construction
+ImmutableList<String> built = ImmutableList.<String>builder()
+    .add("Alice")
+    .add("Bob")
+    .add("Charlie")
+    .build();
+```
+
+<ul>
+<li><strong>✅ Pros:</strong> Explicit type (`ImmutableList` not just `List`), builder pattern for complex construction, null-hostile, well-tested, available since Java 6. The type itself documents that the list won't change.</li>
+<li><strong>❌ Cons:</strong> External dependency. The explicit type means you're coupled to Guava's API, which some teams avoid for standard-library purism.</li>
+</ul>
+
+### 4.5 Defensive Copying
+
+The oldest technique, and still the most reliable when you don't trust the caller:
+
+```java
+public class Garage {
+    private final List<Car> cars;
+
+    public Garage(List<Car> cars) {
+        // Defensive copy on the way in
+        this.cars = new ArrayList<>(cars);
+    }
+
+    public List<Car> getCars() {
+        // Defensive copy on the way out
+        return new ArrayList<>(cars);
+    }
+
+    // Or return an unmodifiable view
+    public List<Car> getCarsView() {
+        return Collections.unmodifiableList(cars);
+    }
+}
+```
+
+<ul>
+<li><strong>✅ Pros:</strong> Works with any Java version. Explicit control over what gets copied and when.</li>
+<li><strong>❌ Cons:</strong> Easy to forget. O(n) copies every time — expensive if called in a loop. Still doesn't protect against mutation of the elements themselves.</li>
+</ul>
+
+### 4.6 Comparison Table
+
+<div className="overflow-x-auto">
+<table className="w-full text-sm border-collapse">
+<thead>
+<tr className="border-b border-[var(--border)]">
+<th className="text-left py-2 pr-4 font-semibold">Method</th>
+<th className="text-left py-2 pr-4 font-semibold">Java Version</th>
+<th className="text-left py-2 pr-4 font-semibold">Nulls</th>
+<th className="text-left py-2 pr-4 font-semibold">Dependency</th>
+<th className="text-left py-2 font-semibold">Independence</th>
+</tr>
+</thead>
+<tbody>
+<tr className="border-b border-[var(--border)]">
+<td className="py-2 pr-4"><code>List.of()</code></td>
+<td className="py-2 pr-4">9+</td>
+<td className="py-2 pr-4">❌ rejects</td>
+<td className="py-2 pr-4">None</td>
+<td className="py-2">N/A — creates new</td>
+</tr>
+<tr className="border-b border-[var(--border)]">
+<td className="py-2 pr-4"><code>Collections.unmodifiableList()</code></td>
+<td className="py-2 pr-4">1.2+</td>
+<td className="py-2 pr-4">⚠️ depends on backing list</td>
+<td className="py-2 pr-4">None</td>
+<td className="py-2">❌ view — backing list changes leak through</td>
+</tr>
+<tr className="border-b border-[var(--border)]">
+<td className="py-2 pr-4"><code>List.copyOf()</code></td>
+<td className="py-2 pr-4">10+</td>
+<td className="py-2 pr-4">❌ rejects</td>
+<td className="py-2 pr-4">None</td>
+<td className="py-2">✅ independent copy</td>
+</tr>
+<tr className="border-b border-[var(--border)]">
+<td className="py-2 pr-4"><code>ImmutableList.of()</code></td>
+<td className="py-2 pr-4">6+ (Guava)</td>
+<td className="py-2 pr-4">❌ rejects</td>
+<td className="py-2 pr-4">Guava</td>
+<td className="py-2">✅ independent (copyOf) or new (of)</td>
+</tr>
+<tr>
+<td className="py-2 pr-4">Defensive <code>new ArrayList&lt;&gt;(x)</code></td>
+<td className="py-2 pr-4">All</td>
+<td className="py-2 pr-4">✅ allows</td>
+<td className="py-2 pr-4">None</td>
+<td className="py-2">✅ independent copy</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<strong>My recommendation:</strong>
+- For APIs that <em>return</em> lists: use `List.copyOf()` (Java 10+) or `Collections.unmodifiableList()` with a defensive copy of the internal state. Never return the raw internal list.
+- For APIs that <em>accept</em> lists in constructors: always make a defensive copy.
+- For constants and test data: `List.of()`.
+- If you control the whole codebase: make the elements themselves immutable (use records!) and `List.copyOf()`— then you get true deep immutability without Guava.
+
+## 5. Records: Immutability by Default
+
+Java 14 introduced records, which are immutable data carriers by design:
+
+```java
+public record Car(String model, int year) {}
+
+Car car = new Car("Civic", 2020);
+System.out.println(car.model());  // "Civic" — accessor, not getter
+System.out.println(car.year());   // 2020
+// car.setModel("Accord");        // ❌ doesn't compile
+
+Car same = new Car("Civic", 2020);
+System.out.println(car.equals(same));  // true — auto-generated value equality
+System.out.println(car.hashCode());     // consistent with equals
+```
+
+A record automatically generates:
+- A canonical constructor
+- Private final fields
+- Public accessor methods (named after the field, no `get` prefix)
+- `equals()`, `hashCode()`, and `toString()`
+
+Records are <strong>shallowly immutable</strong> — the fields can't be reassigned, but if a field is a mutable type (like `ArrayList`), its contents can change. For deep immutability, use immutable types for all fields:
+
+```java
+public record Garage(List<Car> cars) {
+    public Garage {
+        // Compact constructor — defensive copy before assignment
+        cars = List.copyOf(cars);
+    }
+}
+```
+
+For most DTOs, value objects, and data containers, records eliminate the boilerplate of writing immutable classes by hand.
+
+## 6. Why Bother? The Benefits
+
+Immutability isn't an academic exercise. It delivers real engineering benefits:
+
+<ul>
+<li><strong>Thread safety for free.</strong> No locks, no synchronized blocks, no volatile fields. Immutable objects can be shared across threads without any coordination. This alone justifies immutability in concurrent systems.</li>
+<li><strong>Predictable behavior.</strong> An immutable object never surprises you. If you pass a String to a method, the method cannot corrupt it. You don't need to read the method's implementation to know if your data is safe.</li>
+<li><strong>Simpler caching.</strong> Immutable objects never need invalidation. Cache them forever. Java's String pool is the classic example, but the same principle applies to any computed value.</li>
+<li><strong>Atomic failure.</strong> An immutable object is either fully constructed or not at all. There's no window where the object is in an invalid halfway state — the constructor must complete before any reference to the object exists (modulo unsafe publication, which the `final` keyword prevents).</li>
+<li><strong>Easier reasoning.</strong> Pure functions + immutable data = local reasoning. You don't need to trace through the entire call stack to understand what a method does to your object. This is why functional languages push immutability so hard.</li>
+</ul>
+
+## 7. Good Practices & Pitfalls
+
+After working with immutable types for years across concurrent systems, here's what I've learned:
+
+<ul>
+<li><strong>1. Defensive copy on the way in AND out.</strong> If your immutable class holds a mutable collection, copy it in the constructor AND wrap the returned value. One without the other is a half-measure.</li>
+<li><strong>2. Prefer composition of immutable types.</strong> A class made entirely of Strings, primitives, and immutable collections is automatically deeply immutable. No special handling needed.</li>
+<li><strong>3. Be careful with Date and Calendar.</strong> These are mutable. Use `java.time.*` classes (Instant, LocalDate, LocalDateTime) instead — they're all immutable.</li>
+<li><strong>4. Don't expose arrays.</strong> Even if you declare `private final String[]`, the <em>reference</em> can't change, but the contents can. Either clone arrays defensively or use `List.of()` instead.</li>
+<li><strong>5. Withers beat setters.</strong> When you need a modified version, return a new object. This pattern (called "functional update") is what String, BigDecimal, and records encourage.</li>
+<li><strong>6. Document your immutability.</strong> Add `@Immutable` (from JSR-305) or a simple Javadoc comment: <code>/*&#42; Immutable. *&#47;</code>. Future maintainers will thank you — and think twice before adding that setter.</li>
+<li><strong>7. Watch out for inheritance.</strong> Even if your class is immutable, a subclass might not be. Mark your class <code>final</code>, or at minimum make all constructors <code>private</code> and expose static factories. Records are implicitly final, which is another reason to use them.</li>
+</ul>
+
+## 8. Conclusion
+
+Immutability isn't a Java quirk — it's a design principle that pays dividends in thread safety, predictability, and maintainability. Java gives you the tools: `final` fields, records, `List.of()`, `List.copyOf()`, and `Collections.unmodifiableList()`. Use them.
+
+The mental model is simple: <strong>don't let anyone change what you've built</strong>. Make fields final. Copy collections defensively. Return immutable views. And if you're on Java 14+, just use records and let the compiler do the heavy lifting.
+
+Start with immutability as the default. Make things mutable only when you have a concrete reason — not the other way around. Your future self, debugging a concurrency issue at 2 AM, will be grateful.
+
+<Quiz slug="java-immutability" />

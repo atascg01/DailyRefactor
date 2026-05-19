@@ -16,6 +16,23 @@ export interface ArticleMeta {
 
 export const articles: ArticleMeta[] = [
   {
+    id: 8,
+    slug: "java-immutability",
+    title: "Immutability in Java: Why Your Objects Should Be Stone Tablets, Not Whiteboards",
+    excerpt:
+      "Learn what immutability really means in Java, how to make objects immutable (the five rules), why Strings work the way they do, and every way to make collections immutable — with tradeoffs.",
+    category: "Java",
+    image:
+      "https://images.unsplash.com/photo-1536098140527-44e5c3c9e6e1?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80",
+    date: "April 21, 2026",
+    readTime: "12 min read",
+    author: {
+      name: "Andres Tascon",
+      avatar: "/images/pic_photo.jpg",
+      role: "Senior Software Engineer @ Oracle",
+    },
+  },
+  {
     id: 7,
     slug: "hashcode-equals-java",
     title: "HashCode vs Equals in Java: The Contract Every Developer Must Understand",
