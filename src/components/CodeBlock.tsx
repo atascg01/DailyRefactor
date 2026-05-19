@@ -22,13 +22,13 @@ export default function CodeBlock({ children, ...props }: CodeBlockProps) {
   };
 
   return (
-    <figure data-rehype-pretty-code-figure="" className="group relative">
+    <>
       {language && (
-        <div className="flex items-center justify-between px-4 py-2 bg-[var(--muted)] border-b border-[var(--border)] text-xs text-[var(--muted-foreground)]">
+        <div className="flex items-center justify-between px-4 py-2 bg-[#161b22] border-b border-[#30363d] text-xs text-[#8b949e] rounded-t-xl">
           <span>{language}</span>
           <button
             onClick={handleCopy}
-            className="flex items-center gap-1.5 hover:text-[var(--foreground)] transition-colors"
+            className="flex items-center gap-1.5 hover:text-[#c9d1d9] transition-colors"
           >
             {copied ? (
               <>
@@ -53,10 +53,10 @@ export default function CodeBlock({ children, ...props }: CodeBlockProps) {
           </button>
         </div>
       )}
-      <pre className="m-0 overflow-x-auto">
+      <pre className={`bg-[#0d1117] overflow-x-auto ${language ? "rounded-b-xl" : "rounded-xl"}`}>
         {children}
       </pre>
-    </figure>
+    </>
   );
 }
 
