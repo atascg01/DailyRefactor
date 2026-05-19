@@ -16,6 +16,23 @@ export interface ArticleMeta {
 
 export const articles: ArticleMeta[] = [
   {
+    id: 7,
+    slug: "hashcode-equals-java",
+    title: "HashCode vs Equals in Java: The Contract Every Developer Must Understand",
+    excerpt:
+      "Understand what hashcodes really are, how HashMap lookups work under the hood, and why the hashCode-equals contract is the foundation of every cache and collection in your application.",
+    category: "Java",
+    image:
+      "https://images.unsplash.com/photo-1555066931-4365d14bab8c?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80",
+    date: "April 28, 2026",
+    readTime: "11 min read",
+    author: {
+      name: "Andres Tascon",
+      avatar: "/images/pic_photo.jpg",
+      role: "Senior Software Engineer @ Oracle",
+    },
+  },
+  {
     id: 1,
     slug: "java-concurrency",
     title: "Concurrency in Java: A guide to ExecutorService and Future",

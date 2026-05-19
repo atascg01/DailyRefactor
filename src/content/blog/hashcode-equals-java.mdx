@@ -1,0 +1,326 @@
+<p>Every Java developer has seen that interview question: <em>"What's the contract between hashCode and equals?"</em> Most of us can recite it by heart — but fewer can explain <em>why</em> it exists in the first place. In this article, I'll walk through what hashcodes actually are, how a HashMap uses them under the hood, and why getting this contract right (or wrong) can make or break your application.</p>
+
+## Table of Contents
+
+- [1. What Is a HashCode?](#1-what-is-a-hashcode)
+- [2. How a HashMap Lookup Actually Works](#2-how-a-hashmap-lookup-actually-works)
+  - [2.1 Step 1: Computing the Hash](#21-step-1-computing-the-hash)
+  - [2.2 Step 2: Finding the Bucket](#22-step-2-finding-the-bucket)
+  - [2.3 Step 3: Searching Inside the Bucket](#23-step-3-searching-inside-the-bucket)
+  - [2.4 The Worst-Case Scenario](#24-the-worst-case-scenario)
+- [3. What Is the Equals Method?](#3-what-is-the-equals-method)
+- [4. The Golden Contract](#4-the-golden-contract)
+  - [4.1 If a.equals(b), Then hashCode Must Match](#41-if-aequalsb-then-hashcode-must-match)
+  - [4.2 The Reverse Is NOT True](#42-the-reverse-is-not-true)
+- [5. When Should You Override?](#5-when-should-you-override)
+  - [5.1 When You MUST Override Both](#51-when-you-must-override-both)
+  - [5.2 When Defaults Are Fine](#52-when-defaults-are-fine)
+- [6. Good Practices](#6-good-practices)
+- [7. Conclusion](#7-conclusion)
+
+## 1. What Is a HashCode?
+
+A hashcode is an integer that represents an object. Think of it as a fingerprint — not unique (different objects can have the same fingerprint), but consistent: the same object should always produce the same hashcode during a single JVM execution.
+
+In Java, every object inherits `hashCode()` from `Object`. The default implementation typically converts the object's internal memory address into an integer. This means two logically identical objects will have <em>different</em> hashcodes unless you override the method.
+
+```java
+public class HashCodeDemo {
+    public static void main(String[] args) {
+        String a = "hello";
+        String b = "hello";
+        String c = new String("hello");
+
+        System.out.println(a.hashCode());  // 99162322
+        System.out.println(b.hashCode());  // 99162322 (same string pool object)
+        System.out.println(c.hashCode());  // 99162322 (String overrides hashCode by content)
+    }
+}
+```
+
+Notice that `String` overrides `hashCode()` to compute a value based on its characters. That's why `a`, `b`, and `c` all produce the same hashcode — they contain the same text. If `String` used the default `Object.hashCode()`, `c` would have a different value because `new String("hello")` creates a new object at a different memory address.
+
+But hashcodes aren't just for `String`. Their real superpower shows up in hash-based collections like `HashMap`, `HashSet`, and `Hashtable`. To understand why, let's look at how a HashMap actually finds your data.
+
+## 2. How a HashMap Lookup Actually Works
+
+When you call `map.get(key)`, the HashMap doesn't scan every entry. That would be `O(n)` — fine for a dozen entries, terrible for a million. Instead, it uses the key's hashcode to jump straight to a <em>bucket</em>, narrowing the search to a tiny subset of entries. Here's exactly what happens, step by step.
+
+### 2.1 Step 1: Computing the Hash
+
+The first thing HashMap does is call `key.hashCode()` to get the raw integer. But it doesn't use that value directly as an array index — large hashcodes would blow past any reasonable array size.
+
+Instead, HashMap applies a <em>spread function</em> to the raw hashcode. In modern Java (8+), it XORs the hashcode's upper 16 bits with its lower 16 bits:
+
+```java
+// Simplified — the actual implementation is in HashMap.hash()
+static final int hash(Object key) {
+    int h;
+    return (key == null) ? 0 : (h = key.hashCode()) ^ (h >>> 16);
+}
+```
+
+This mixing step reduces clustering: without it, hashcodes that differ only in their upper bits would collide constantly in small- to medium-sized maps.
+
+### 2.2 Step 2: Finding the Bucket
+
+After computing the spread hash, HashMap maps it to a bucket index. Because the internal array size is always a power of two, this is a simple bitwise AND:
+
+```java
+int index = hash & (table.length - 1);
+```
+
+For example, with an array of size 16, `table.length - 1` is `15` (binary `1111`). The AND operation keeps only the lowest 4 bits, giving an index between 0 and 15.
+
+Now the HashMap knows <em>which</em> bucket to look in. What it finds there depends on several scenarios.
+
+### 2.3 Step 3: Searching Inside the Bucket
+
+Each bucket holds zero or more entries. Here's what can happen:
+
+**Scenario A: Empty bucket.** The key is not in the map. Return `null`. This is the fastest possible outcome — one hash computation, one array access, done.
+
+**Scenario B: Single entry.** There's exactly one entry in the bucket. HashMap calls `equals()` between your key and that entry's key. If they match, the value is returned. If not, the key isn't in the map — return `null`.
+
+**Scenario C: Multiple entries (collision).** Two or more keys landed in the same bucket. This is called a <em>hash collision</em> and it's perfectly normal. HashMap now traverses the bucket's structure:
+
+<ul>
+<li><strong>Linked list (small collisions):</strong> For buckets with few entries, HashMap stores them in a linked list — each node has a <code>next</code> pointer. It walks the list and calls <code>equals()</code> on each key until it finds a match or reaches the end.</li>
+<li><strong>Red-black tree (large collisions):</strong> Starting in Java 8, when a bucket exceeds 8 entries and the overall map size is at least 64, the linked list is converted into a balanced red-black tree. Tree search is <code>O(log n)</code> instead of <code>O(n)</code>, dramatically improving performance under heavy collisions.</li>
+</ul>
+
+```java
+// Pseudocode of what HashMap.get() does internally
+public V get(Object key) {
+    int hash = hash(key);
+    int index = hash & (table.length - 1);
+    Node<K,V> bucket = table[index];
+
+    if (bucket == null) {
+        return null;                    // Scenario A: empty
+    }
+
+    // Check first node (common case optimization)
+    if (bucket.hash == hash && bucket.key.equals(key)) {
+        return bucket.value;
+    }
+
+    // Scenario B/C: traverse list or tree
+    Node<K,V> current = bucket.next;
+    while (current != null) {
+        if (current.hash == hash && current.key.equals(key)) {
+            return current.value;
+        }
+        current = current.next;
+    }
+
+    return null;  // not found
+}
+```
+
+Notice the double-check: HashMap first compares <strong>hashes</strong>, and only calls <code>equals()</code> if hashes match. This avoids the expensive <code>equals()</code> call when the hashes differ, making even collision-traversal reasonably fast.
+
+### 2.4 The Worst-Case Scenario
+
+The worst case for a HashMap lookup is when every key produces the <em>same</em> hashcode. All entries pile into a single bucket, and every `get()` becomes a linear scan of the entire map — `O(n)`.
+
+This can happen intentionally with a maliciously crafted class:
+
+```java
+class BrokenKey {
+    private final int id;
+
+    BrokenKey(int id) { this.id = id; }
+
+    @Override
+    public int hashCode() {
+        return 1; // every object hashes to the same bucket
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (!(o instanceof BrokenKey)) return false;
+        return this.id == ((BrokenKey) o).id;
+    }
+}
+```
+
+With this class, a HashMap with 10,000 entries degenerates into a linked list of 10,000 nodes. In Java 8+, the bucket <em>will</em> treeify (convert to a red-black tree) once it exceeds 8 entries and the map is large enough, which improves the search from `O(n)` to `O(log n)`. But it's still far from `O(1)` — and the treeification itself costs CPU time.
+
+The worst-case is also why `String.hashCode()` was not modified to prevent hash-collision DoS attacks until Java 7u6. Before that fix, attackers could craft URL parameters that all hashed to the same bucket, grinding server-side HashMaps to a halt.
+
+## 3. What Is the Equals Method?
+
+`equals()` answers the question: <em>"Are these two objects meaningfully the same?"</em>
+
+The default implementation in `Object` checks reference identity — it's literally `this == obj`. Two distinct objects are never equal, even if every field is identical:
+
+```java
+class Person {
+    String name;
+    int age;
+
+    Person(String name, int age) {
+        this.name = name;
+        this.age = age;
+    }
+}
+
+Person p1 = new Person("Alice", 30);
+Person p2 = new Person("Alice", 30);
+
+System.out.println(p1.equals(p2));  // false — different memory addresses
+```
+
+This is correct behavior if reference identity is what you want. But most of the time, when we say two `Person` objects are equal, we mean they represent the same person — same name, same age. To get that behavior, you override `equals()` to compare fields:
+
+```java
+@Override
+public boolean equals(Object o) {
+    if (this == o) return true;
+    if (!(o instanceof Person)) return false;
+    Person person = (Person) o;
+    return age == person.age && Objects.equals(name, person.name);
+}
+```
+
+The `equals()` contract (from the Java docs) requires that the method be <strong>reflexive</strong> (`x.equals(x)` is true), <strong>symmetric</strong> (`x.equals(y)` implies `y.equals(x)`), <strong>transitive</strong> (if `x.equals(y)` and `y.equals(z)`, then `x.equals(z)`), <strong>consistent</strong> (repeated calls return the same result unless fields change), and that `x.equals(null)` always returns `false`.
+
+## 4. The Golden Contract
+
+Here's the contract engraved in the `Object` Javadoc — and in every Java interview ever:
+
+> If two objects are equal according to `equals()`, they <strong>must</strong> have the same hashcode. The reverse is not required.
+
+Let's unpack both halves.
+
+### 4.1 If a.equals(b), Then hashCode Must Match
+
+This rule exists because of how HashMap works. When you `put(a, value)` and later `get(b)`, the HashMap uses the hashcode to find the bucket. If `a.equals(b)` is true but their hashcodes differ, the `get(b)` call goes to a <em>different bucket</em> — and never finds the entry.
+
+```java
+class BrokenPerson {
+    String name;
+    int age;
+
+    BrokenPerson(String name, int age) {
+        this.name = name;
+        this.age = age;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (!(o instanceof BrokenPerson)) return false;
+        BrokenPerson p = (BrokenPerson) o;
+        return age == p.age && Objects.equals(name, p.name);
+    }
+
+    // NO hashCode override — uses Object.hashCode() (memory address)
+}
+
+Map<BrokenPerson, String> map = new HashMap<>();
+BrokenPerson a = new BrokenPerson("Alice", 30);
+map.put(a, "Engineer");
+
+BrokenPerson b = new BrokenPerson("Alice", 30);
+System.out.println(a.equals(b));           // true
+System.out.println(map.get(b));            // null — different hashCode, different bucket!
+```
+
+This is the most common bug I see in code reviews: a developer overrides `equals()` but forgets `hashCode()`. Everything compiles, tests might even pass with small datasets, and then production breaks in mysterious ways.
+
+### 4.2 The Reverse Is NOT True
+
+Different objects can absolutely have the same hashcode. That's a <em>hash collision</em>, and it's expected. The hashcode is a 32-bit integer, but an object can contain far more than 32 bits of information — collisions are mathematically inevitable.
+
+```java
+// Two different strings with the same hashcode (collision)
+String s1 = "Aa";
+String s2 = "BB";
+
+System.out.println(s1.hashCode());  // 2112
+System.out.println(s2.hashCode());  // 2112
+System.out.println(s1.equals(s2));  // false — different strings, same hash
+```
+
+The HashMap handles this gracefully: it stores both entries in the same bucket and uses `equals()` to tell them apart. Collisions degrade performance but never produce wrong results — <em>as long as equals() is correct</em>.
+
+## 5. When Should You Override?
+
+### 5.1 When You MUST Override Both
+
+Override both `equals()` and `hashCode()` when your objects will be:
+
+<ul>
+<li><strong>Used as keys in HashMaps or elements in HashSets.</strong> If you ever call <code>map.put(myObj, value)</code> and later <code>map.get(anotherObjWithSameFields)</code>, you need proper equality.</li>
+<li><strong>Value objects or DTOs.</strong> Two instances with identical field values should be considered equal. Examples: <code>Money</code>, <code>EmailAddress</code>, <code>GeoPoint</code>, <code>UserId</code>.</li>
+<li><strong>Entities with business keys.</strong> If a <code>Customer</code> is identified by their <code>customerId</code> (not the database row), two objects with the same ID should be equal — even if one came from a cache and the other from a fresh query.</li>
+<li><strong>Compared in test assertions.</strong> JUnit's <code>assertEquals</code> calls <code>equals()</code>. Without proper overrides, two logically identical objects won't match.</li>
+</ul>
+
+### 5.2 When Defaults Are Fine
+
+Don't bother overriding when:
+
+<ul>
+<li><strong>Reference equality is correct.</strong> Singletons, service objects, controllers — things where only one instance should ever exist.</li>
+<li><strong>Objects will never enter a hash-based collection.</strong> But be careful — this is a fragile assumption. Today's POJO is tomorrow's cache key.</li>
+<li><strong>The class is designed with identity semantics.</strong> Threads, database connections, input streams — where "same" means "same instance," not "same fields."</li>
+</ul>
+
+Java 14+ <strong>records</strong> handle all of this for you automatically:
+
+```java
+public record Person(String name, int age) {}
+
+Person p1 = new Person("Alice", 30);
+Person p2 = new Person("Alice", 30);
+
+System.out.println(p1.equals(p2));    // true — auto-generated
+System.out.println(p1.hashCode());    // consistent auto-generated hash
+```
+
+For POJOs, modern IDEs (IntelliJ, Eclipse) and Lombok's `@EqualsAndHashCode` generate correct implementations in one click. There's rarely a reason to hand-write these methods anymore.
+
+## 6. Good Practices
+
+After years of debugging hashCode-equals bugs, here's what I've learned:
+
+<ul>
+<li><strong>1. Always override both, never just one.</strong> Violating the contract is worse than overriding neither. A missing <code>hashCode()</code> silently breaks HashMaps; a missing <code>equals()</code> breaks collections and assertions.</li>
+<li><strong>2. Use the same fields in both methods.</strong> If <code>equals()</code> compares <code>name</code> and <code>age</code>, <code>hashCode()</code> must also use <code>name</code> and <code>age</code> — no more, no less. Using extra fields in <code>hashCode()</code> that <code>equals()</code> ignores creates false mismatches; using fewer fields creates unnecessary collisions.</li>
+<li><strong>3. Favor immutable fields.</strong> If you mutate a field that <code>hashCode()</code> depends on <em>while the object is in a HashMap</em>, the object lands in the wrong bucket and becomes unfindable — a silent data leak. Use <code>final</code> fields for hash components whenever possible.</li>
+<li><strong>4. Don't use random numbers or timestamps in hashCode.</strong> <code>hashCode()</code> must be deterministic. Calling it twice on the same object must return the same value (unless fields used in <code>equals()</code> changed). Using <code>Math.random()</code> or <code>System.nanoTime()</code> breaks collections.</li>
+<li><strong>5. Be careful with inheritance.</strong> If a subclass adds fields to <code>equals()</code>, it must also add them to <code>hashCode()</code> — and vice versa. Better yet, favor composition over inheritance for value types, or use records.</li>
+<li><strong>6. Use <code>Objects.hash()</code> or IDE-generated code.</strong> Hand-rolling hash functions is error-prone. The utility method handles nulls and mixing:</li>
+</ul>
+
+```java
+@Override
+public int hashCode() {
+    return Objects.hash(name, age, email);
+}
+```
+
+```java
+@Override
+public boolean equals(Object o) {
+    if (this == o) return true;
+    if (!(o instanceof Person p)) return false;
+    return age == p.age
+        && Objects.equals(name, p.name)
+        && Objects.equals(email, p.email);
+}
+```
+
+<ul>
+<li><strong>7. Document your choices.</strong> If you deliberately don't override these methods (for identity-based semantics), add a comment explaining why. Future maintainers — including your future self — will thank you.</li>
+</ul>
+
+## 7. Conclusion
+
+HashCode and equals aren't obscure trivia for certification exams. They're the foundation of every HashMap, HashSet, and cache in your application. Get them right and your collections work like magic — `O(1)` lookups, correct deduplication, predictable behavior. Get them wrong and you get phantom nulls, memory leaks from unfindable entries, and production incidents that are nearly impossible to reproduce.
+
+The contract is simple: equal objects must have equal hashcodes. The implementation is even simpler these days: use records, use your IDE's generator, or use Lombok. Hand-writing these methods is a code smell in 2026 — there's almost always a better way.
+
+Just remember: override both or override neither. Halfway is where the bugs live.
