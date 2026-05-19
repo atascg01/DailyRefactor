@@ -1,3 +1,5 @@
+import Quiz from "@/components/Quiz";
+
 MCP — the Model Context Protocol — is the closest thing we have to a universal plug for AI applications. Think USB-C, but for connecting LLMs to your tools, data, and workflows.
 
 I've been building MCP servers for a few months now, and while the spec is clean, there's a gap between "it works on my machine" and "this belongs in production." Let me walk you through the primitives, show you real code, and then give you the rules that make the difference.
@@ -469,3 +471,5 @@ MCP servers are less about the protocol and more about good API design. The prot
 If you take one thing away: write descriptions like you're onboarding a new developer. The model is that developer — it's smart, it can figure things out, but it needs you to tell it what your tools do and when to use them.
 
 The code for the bookmark server is at [github.com/atascg01/mcp-bookmark-server](https://github.com/atascg01/mcp-bookmark-server) — clone it, extend it, break it.
+
+<Quiz slug="build-mcp-server" />

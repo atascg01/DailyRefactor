@@ -1,3 +1,5 @@
+import Quiz from "@/components/Quiz";
+
 <p>Every Java developer has seen that interview question: <em>"What's the contract between hashCode and equals?"</em> Most of us can recite it by heart — but fewer can explain <em>why</em> it exists in the first place. In this article, I'll walk through what hashcodes actually are, how a HashMap uses them under the hood, and why getting this contract right (or wrong) can make or break your application.</p>
 
 ## Table of Contents
@@ -324,3 +326,5 @@ HashCode and equals aren't obscure trivia for certification exams. They're the f
 The contract is simple: equal objects must have equal hashcodes. The implementation is even simpler these days: use records, use your IDE's generator, or use Lombok. Hand-writing these methods is a code smell in 2026 — there's almost always a better way.
 
 Just remember: override both or override neither. Halfway is where the bugs live.
+
+<Quiz slug="hashcode-equals-java" />

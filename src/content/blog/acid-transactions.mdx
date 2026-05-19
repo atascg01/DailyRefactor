@@ -1,3 +1,5 @@
+import Quiz from "@/components/Quiz";
+
 ACID is one of those terms that gets thrown around in interviews and architecture docs, but most developers only half-remember what it means. Let me fix that.
 
 ACID stands for Atomicity, Consistency, Isolation, and Durability — four properties that guarantee database transactions are reliable, even when everything goes wrong. A crash, a power failure, two users hitting the same row at the same time — ACID is the reason your data doesn't turn into garbage.
@@ -153,3 +155,4 @@ ACID isn't academic trivia — it's the reason your bank doesn't lose money, you
 **Atomicity**: All or nothing.**Consistency**: Only valid states.**Isolation**: No interference between transactions.**Durability**: Committed means permanent.
 
 If you're working with relational databases, you're already using ACID every day. Understanding *why* it works means you can make better decisions about when to enforce it, when to relax it, and when something else entirely (like eventual consistency) is the right call.
+<Quiz slug="acid-transactions" />
