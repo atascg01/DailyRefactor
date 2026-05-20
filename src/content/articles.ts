@@ -170,6 +170,9 @@ export const articles: ArticleMeta[] = [
   },
 ];
 
+// Sort by published date (newest first)
+articles.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
 export function getArticle(id: number): ArticleMeta | undefined {
   return articles.find((a) => a.id === id);
 }
