@@ -1,0 +1,669 @@
+import Quiz from "@/components/Quiz";
+
+Domain-Driven Design sounds like one of those enterprise buzzwords that consultants use to sell you a $50,000 workshop. But strip away the jargon and DDD is just a set of practical ideas for modeling complex business logic in code — ideas that developers independently rediscover after years of maintaining "anemic" CRUD apps that turn into spaghetti.
+
+Here's the problem DDD solves: most line-of-business applications start simple. A few REST endpoints, a database table, some validation. Six months later you have 47 `if` statements scattered across controllers, services, and "utils" classes, each encoding some implicit business rule nobody fully understands anymore. The domain expert explains how refunds should work and you realize your code models something completely different.
+
+DDD says: _put the domain model at the center. Everything else (databases, HTTP, message queues) is infrastructure that serves the model, not the other way around._
+
+## Table of Contents
+
+- [1. What is DDD and when should you use it?](#1-what-is-ddd-and-when-should-you-use-it)
+- [2. The building blocks](#2-the-building-blocks)
+  - [2.1 Entities — things with identity](#21-entities--things-with-identity)
+  - [2.2 Value Objects — things defined by their attributes](#22-value-objects--things-defined-by-their-attributes)
+  - [2.3 Aggregates — consistency boundaries](#23-aggregates--consistency-boundaries)
+  - [2.4 Invariants — rules that must always hold](#24-invariants--rules-that-must-always-hold)
+- [3. A feature end-to-end: placing an order](#3-a-feature-end-to-end-placing-an-order)
+  - [3.1 The Domain layer](#31-the-domain-layer)
+  - [3.2 The Application layer](#32-the-application-layer)
+  - [3.3 The Infrastructure layer](#33-the-infrastructure-layer)
+  - [3.4 The API layer](#34-the-api-layer)
+- [4. Repository organization](#4-repository-organization)
+- [5. Common mistakes and when to avoid DDD](#5-common-mistakes-and-when-to-avoid-ddd)
+- [6. Bottom line](#6-bottom-line)
+
+## 1. What is DDD and when should you use it?
+
+Domain-Driven Design was formalized by Eric Evans in his 2003 book (the "blue book"). The core idea is simple: _your code should speak the same language as the business people who use it._
+
+Instead of this:
+
+```java
+// What does this even mean? Only the original developer knows.
+if (order.getStatus() == 3 && payment.getAmount() > 0) {
+    order.setFieldX(payment.getFieldY());
+    inventory.decrement(productId, 1);
+}
+```
+
+You write this:
+
+```java
+// The code tells the story of what's happening.
+order.fulfill(payment);
+```
+
+That's the _ubiquitous language_ — the same words used by domain experts show up in your code. If the warehouse manager says "we fulfill orders after payment clears," your code literally says `order.fulfill(payment)`.
+
+### When DDD makes sense
+
+DDD is not a silver bullet. It has a specific sweet spot:
+
+**✅ Use DDD when:**
+- The business domain is complex and changes frequently
+- Business rules are the core value of the application (not just CRUD)
+- You have access to domain experts who can collaborate on the model
+- The application will be maintained by multiple teams over years
+
+**❌ Skip DDD when:**
+- You're building a thin CRUD wrapper around a database (just use Spring Data REST)
+- The complexity is purely technical (data pipelines, API gateways, infrastructure tools)
+- The domain is well-understood with off-the-shelf solutions (accounting, payroll — use existing software)
+- You're a two-person startup building an MVP that might pivot next month
+
+The key heuristic: _if your biggest challenge is understanding the business rules, use DDD. If your biggest challenge is technical plumbing, use something simpler._
+
+## 2. The building blocks
+
+DDD provides a vocabulary of patterns. Here are the ones you'll use every day, with real Java code.
+
+### 2.1 Entities — things with identity
+
+An Entity is an object defined by its _identity_, not by its attributes. Two customers with the same name and address are still different customers — identity is what matters.
+
+An Entity must:
+- Have a stable, unique identifier
+- Be mutable (its attributes can change over time)
+- Be compared by identity, not by value
+
+```java
+public class Customer {
+    private final CustomerId id;       // Identity — never changes
+    private String name;                // Mutable attributes
+    private EmailAddress email;         // Mutable attributes
+    private CustomerStatus status;      // Mutable attributes
+
+    // Constructor only requires identity + minimum valid state
+    public Customer(CustomerId id, String name, EmailAddress email) {
+        this.id = Objects.requireNonNull(id);
+        this.name = Objects.requireNonNull(name);
+        this.email = Objects.requireNonNull(email);
+        this.status = CustomerStatus.ACTIVE;
+    }
+
+    // Behavior, not getters/setters
+    public void changeEmail(EmailAddress newEmail) {
+        this.email = Objects.requireNonNull(newEmail);
+    }
+
+    public void suspend() {
+        if (this.status == CustomerStatus.DELETED) {
+            throw new IllegalStateException("Cannot suspend a deleted customer");
+        }
+        this.status = CustomerStatus.SUSPENDED;
+    }
+
+    // Identity-based equality
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof Customer that)) return false;
+        return id.equals(that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return id.hashCode();
+    }
+
+    // Getters only for data the outside world needs
+    public CustomerId getId() { return id; }
+    public String getName() { return name; }
+    public EmailAddress getEmail() { return email; }
+    public CustomerStatus getStatus() { return status; }
+}
+```
+
+A few things to notice:
+
+1. **No setters.** Methods have meaningful names that express business intent — `changeEmail`, `suspend`. Not `setEmail`, `setStatus`.
+2. **Constructor enforces valid state.** You can't create a customer without an ID, name, and email. The object is valid from birth.
+3. **equals/hashCode use only the ID.** Even if every other field changes, it's still the same customer.
+
+The identity itself should be a dedicated type, not a raw `String` or `Long`:
+
+```java
+public record CustomerId(UUID value) {
+    public CustomerId {
+        Objects.requireNonNull(value);
+    }
+
+    public static CustomerId generate() {
+        return new CustomerId(UUID.randomUUID());
+    }
+}
+```
+
+### 2.2 Value Objects — things defined by their attributes
+
+A Value Object has no identity. Two value objects with the same fields are interchangeable — like two $10 bills. They are immutable and compared by their values.
+
+```java
+public record Money(BigDecimal amount, Currency currency) {
+    public Money {
+        Objects.requireNonNull(amount);
+        Objects.requireNonNull(currency);
+        if (amount.scale() > currency.getDefaultFractionDigits()) {
+            throw new IllegalArgumentException("Amount scale exceeds currency precision");
+        }
+    }
+
+    public Money add(Money other) {
+        assertSameCurrency(other);
+        return new Money(amount.add(other.amount), currency);
+    }
+
+    public Money subtract(Money other) {
+        assertSameCurrency(other);
+        return new Money(amount.subtract(other.amount), currency);
+    }
+
+    public Money multiply(int factor) {
+        return new Money(amount.multiply(BigDecimal.valueOf(factor)), currency);
+    }
+
+    public boolean isGreaterThan(Money other) {
+        assertSameCurrency(other);
+        return amount.compareTo(other.amount) > 0;
+    }
+
+    private void assertSameCurrency(Money other) {
+        if (!currency.equals(other.currency)) {
+            throw new IllegalArgumentException(
+                "Cannot operate on different currencies: " + currency + " vs " + other.currency);
+        }
+    }
+
+    public static Money zero(Currency currency) {
+        return new Money(BigDecimal.ZERO, currency);
+    }
+
+    public static Money of(String amount, Currency currency) {
+        return new Money(new BigDecimal(amount), currency);
+    }
+}
+```
+
+Java records are perfect for Value Objects — they're immutable by default and implement `equals`/`hashCode` based on all fields. Notice how `Money` isn't just a data bag: it has behavior. Adding money means calling `add()`, not reaching into two doubles and doing arithmetic in a service class.
+
+More value objects for our domain:
+
+```java
+public record EmailAddress(String value) {
+    public EmailAddress {
+        Objects.requireNonNull(value);
+        if (!value.matches("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$")) {
+            throw new IllegalArgumentException("Invalid email: " + value);
+        }
+    }
+}
+
+public record OrderLine(Money unitPrice, int quantity) {
+    public OrderLine {
+        Objects.requireNonNull(unitPrice);
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Quantity must be positive");
+        }
+    }
+
+    public Money totalPrice() {
+        return unitPrice.multiply(quantity);
+    }
+}
+
+public record Address(
+    String street,
+    String city,
+    String postalCode,
+    String country
+) {
+    public Address {
+        Objects.requireNonNull(street);
+        Objects.requireNonNull(city);
+        Objects.requireNonNull(postalCode);
+        Objects.requireNonNull(country);
+    }
+}
+```
+
+**The rule of thumb:** if two things with identical fields are the same thing, it's a Value Object. If they can have identical fields but still be different things, it's an Entity.
+
+### 2.3 Aggregates — consistency boundaries
+
+An Aggregate is a cluster of Entities and Value Objects treated as a single unit. Every aggregate has a _root_ — the only object external code can reference directly. All changes to objects inside the aggregate go through the root.
+
+Why? Because business invariants need a boundary. "An order's total must equal the sum of its line items' totals" — this rule can only be enforced if all line items are modified through the order.
+
+```java
+public class Order {
+    private final OrderId id;
+    private final CustomerId customerId;
+    private final List<OrderLine> lines;       // Internal collection
+    private OrderStatus status;
+    private Money total;                         // Derived, kept consistent
+    private Address shippingAddress;
+    private LocalDateTime placedAt;
+
+    // Constructor establishes valid state
+    public Order(OrderId id, CustomerId customerId, Address shippingAddress) {
+        this.id = Objects.requireNonNull(id);
+        this.customerId = Objects.requireNonNull(customerId);
+        this.shippingAddress = Objects.requireNonNull(shippingAddress);
+        this.lines = new ArrayList<>();
+        this.status = OrderStatus.DRAFT;
+        this.total = Money.zero(Currency.getInstance("USD"));
+    }
+
+    // --- Aggregate root: the ONLY way to modify this Order ---
+
+    public void addLine(OrderLine line) {
+        if (status != OrderStatus.DRAFT) {
+            throw new IllegalStateException("Can only modify draft orders");
+        }
+        lines.add(line);
+        recalculateTotal();    // Invariant: total always matches lines
+    }
+
+    public void removeLine(int index) {
+        if (status != OrderStatus.DRAFT) {
+            throw new IllegalStateException("Can only modify draft orders");
+        }
+        lines.remove(index);
+        recalculateTotal();
+    }
+
+    public void place() {
+        if (lines.isEmpty()) {
+            throw new IllegalStateException("Cannot place an empty order");
+        }
+        this.status = OrderStatus.PLACED;
+        this.placedAt = LocalDateTime.now();
+    }
+
+    public void markAsShipped() {
+        if (status != OrderStatus.PLACED) {
+            throw new IllegalStateException("Can only ship placed orders");
+        }
+        this.status = OrderStatus.SHIPPED;
+    }
+
+    private void recalculateTotal() {
+        this.total = lines.stream()
+            .map(OrderLine::totalPrice)
+            .reduce(Money.zero(total.currency()), Money::add);
+    }
+
+    // --- Read-only access ---
+    public OrderId getId() { return id; }
+    public CustomerId getCustomerId() { return customerId; }
+    public OrderStatus getStatus() { return status; }
+    public Money getTotal() { return total; }
+
+    // Defensive copy — don't expose the mutable list
+    public List<OrderLine> getLines() {
+        return List.copyOf(lines);
+    }
+
+    // Identity-based equality
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof Order that)) return false;
+        return id.equals(that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return id.hashCode();
+    }
+}
+```
+
+Key design decisions in this aggregate:
+
+1. **`lines` is private — no external code adds lines directly.** All mutations go through `addLine()`/`removeLine()`, which enforce the "only modify draft orders" invariant.
+2. **`total` is recalculated on every mutation.** There is no `setTotal()` — it's derived. An invariant ("total equals sum of line totals") is enforced, not hoped for.
+3. **`getLines()` returns a defensive copy.** Exposing the internal list would let callers bypass the root.
+4. **State transitions are explicit methods.** `place()` and `markAsShipped()` encode the order lifecycle. No `setStatus()`.
+
+### 2.4 Invariants — rules that must always hold
+
+An invariant is a business rule that must be true at all times. Not "most of the time." Not "we'll fix it in a batch job." Always.
+
+In DDD, invariants go _inside_ the domain objects that own the data:
+
+```java
+public class Order {
+    // ... fields ...
+
+    public void applyDiscount(Money discount) {
+        // INVARIANT: Discount cannot make the order free
+        if (discount.isGreaterThan(total)) {
+            throw new IllegalArgumentException(
+                "Discount " + discount + " exceeds order total " + total);
+        }
+        this.total = total.subtract(discount);
+    }
+
+    public void changeShippingAddress(Address newAddress) {
+        // INVARIANT: Can't change address after shipping
+        if (status == OrderStatus.SHIPPED || status == OrderStatus.DELIVERED) {
+            throw new IllegalStateException(
+                "Cannot change shipping address after order has shipped");
+        }
+        this.shippingAddress = Objects.requireNonNull(newAddress);
+    }
+}
+```
+
+Every invariant check happens _at the point of mutation_, inside the domain object. Not in a "validation service" somewhere else. Not in an annotation. In the method that changes the state.
+
+**Where invariants live by scope:**
+
+| Scope | Example | Where it goes |
+|-------|---------|---------------|
+| Single field | Email must have @ sign | `EmailAddress` constructor |
+| Single entity | Customer can't be suspended if deleted | `Customer.suspend()` |
+| Aggregate | Order total = sum of line totals | `Order.addLine()` |
+| Cross-aggregate | Customer can't place order if suspended | Application service (query Customer, then call Order.place()) |
+| Cross-system | Payment must match order total | Domain service or saga |
+
+## 3. A feature end-to-end: placing an order
+
+Let's wire up everything we've built into a real feature. We'll implement "place an order" through every layer: Domain → Application → Infrastructure → API.
+
+### 3.1 The Domain layer
+
+The domain layer contains our entities, value objects, and interfaces (ports) — with zero framework dependencies.
+
+```java
+// --- Domain: Order.java (aggregate root, shown above) ---
+
+// --- Domain: Port — what we need, not how it's implemented ---
+public interface OrderRepository {
+    Optional<Order> findById(OrderId id);
+    void save(Order order);
+}
+
+public interface CustomerRepository {
+    Optional<Customer> findById(CustomerId id);
+}
+
+// --- Domain: Domain Service — for logic spanning multiple aggregates ---
+public class OrderPlacementService {
+
+    public void placeOrder(
+        Order order,
+        Customer customer,
+        CustomerRepository customerRepo,
+        OrderRepository orderRepo
+    ) {
+        // Cross-aggregate invariant: suspended customers can't place orders
+        if (customer.getStatus() == CustomerStatus.SUSPENDED) {
+            throw new DomainException("Suspended customers cannot place orders");
+        }
+
+        order.place();                      // Aggregate-level invariant enforced inside Order
+        orderRepo.save(order);
+    }
+}
+```
+
+Notice: `OrderRepository` and `CustomerRepository` are _interfaces_ in the domain layer. The domain defines the contract (what it needs), not the implementation (how it works). This is the "Ports and Adapters" pattern — the domain owns the ports.
+
+### 3.2 The Application layer
+
+The application layer orchestrates use cases. It doesn't contain business rules — it wires domain objects together and manages transactions.
+
+```java
+// --- Application: Use case ---
+@Transactional
+public class PlaceOrderUseCase {
+
+    private final OrderRepository orderRepository;
+    private final CustomerRepository customerRepository;
+    private final OrderPlacementService orderPlacementService;
+
+    public PlaceOrderUseCase(
+        OrderRepository orderRepository,
+        CustomerRepository customerRepository,
+        OrderPlacementService orderPlacementService
+    ) {
+        this.orderRepository = orderRepository;
+        this.customerRepository = customerRepository;
+        this.orderPlacementService = orderPlacementService;
+    }
+
+    public void execute(PlaceOrderCommand command) {
+        // 1. Load aggregates
+        Order order = orderRepository.findById(command.orderId())
+            .orElseThrow(() -> new OrderNotFoundException(command.orderId()));
+
+        Customer customer = customerRepository.findById(command.customerId())
+            .orElseThrow(() -> new CustomerNotFoundException(command.customerId()));
+
+        // 2. Delegate to domain — application just wires things together
+        orderPlacementService.placeOrder(order, customer,
+                                         customerRepository, orderRepository);
+    }
+}
+
+// --- Application: Command (immutable input DTO) ---
+public record PlaceOrderCommand(OrderId orderId, CustomerId customerId) {}
+```
+
+The application layer is thin by design. Its job: load aggregates, delegate to domain, save. No business logic — that lives in the domain.
+
+### 3.3 The Infrastructure layer
+
+Infrastructure implements the domain's interfaces and handles technical concerns.
+
+```java
+// --- Infrastructure: JPA implementation of OrderRepository ---
+@Repository
+class JpaOrderRepository implements OrderRepository {
+
+    private final JpaOrderEntityRepository jpaRepo;
+
+    public JpaOrderRepository(JpaOrderEntityRepository jpaRepo) {
+        this.jpaRepo = jpaRepo;
+    }
+
+    @Override
+    public Optional<Order> findById(OrderId id) {
+        return jpaRepo.findById(id.value())
+            .map(this::toDomain);
+    }
+
+    @Override
+    public void save(Order order) {
+        jpaRepo.save(toEntity(order));
+    }
+
+    // Mapping between domain model and persistence model
+    private Order toDomain(OrderEntity entity) {
+        Order order = new Order(
+            new OrderId(entity.getId()),
+            new CustomerId(entity.getCustomerId()),
+            parseAddress(entity.getShippingAddress())
+        );
+        entity.getLines().stream()
+            .map(this::toOrderLine)
+            .forEach(order::addLine);
+        // Restore the status from the DB entity...
+        return order;
+    }
+
+    private OrderEntity toEntity(Order order) { /* ... mapping logic ... */ }
+    private OrderLine toOrderLine(OrderLineEntity entity) { /* ... */ }
+}
+
+// --- Infrastructure: JPA entity (separate from domain model!) ---
+@Entity
+@Table(name = "orders")
+class OrderEntity {
+    @Id
+    private UUID id;
+    private UUID customerId;
+    private String status;
+    private String shippingAddress;  // JSON or embedded
+
+    @OneToMany(mappedBy = "order", cascade = ALL, orphanRemoval = true)
+    private List<OrderLineEntity> lines;
+
+    // Getters and setters for JPA — not exposed outside infrastructure
+}
+```
+
+This separation matters: your domain model doesn't know JPA exists. You can swap JPA for jOOQ, MongoDB, or flat files without touching a single domain class.
+
+### 3.4 The API layer
+
+The API layer translates HTTP into application commands and application results into HTTP responses.
+
+```java
+// --- API: REST controller ---
+@RestController
+@RequestMapping("/api/orders")
+class OrderController {
+
+    private final PlaceOrderUseCase placeOrderUseCase;
+
+    public OrderController(PlaceOrderUseCase placeOrderUseCase) {
+        this.placeOrderUseCase = placeOrderUseCase;
+    }
+
+    @PostMapping("/{orderId}/place")
+    public ResponseEntity<Void> placeOrder(
+        @PathVariable UUID orderId,
+        @RequestBody @Valid PlaceOrderRequest request
+    ) {
+        var command = new PlaceOrderCommand(
+            new OrderId(orderId),
+            new CustomerId(request.customerId())
+        );
+        placeOrderUseCase.execute(command);
+        return ResponseEntity.ok().build();
+    }
+}
+
+// --- API: Request DTO (separate from domain) ---
+record PlaceOrderRequest(@NotNull UUID customerId) {}
+```
+
+Result: the API layer is 15 lines. It doesn't know about business rules, transactions, or database queries. It translates HTTP concepts into application concepts and delegates.
+
+## 4. Repository organization
+
+Here's how the project structure looks:
+
+```
+src/main/java/com/example/orders/
+│
+├── api/                          ← API layer (controllers, DTOs)
+│   ├── OrderController.java
+│   ├── PlaceOrderRequest.java
+│   └── GlobalExceptionHandler.java
+│
+├── application/                  ← Application layer (use cases, commands)
+│   ├── PlaceOrderUseCase.java
+│   ├── PlaceOrderCommand.java
+│   └── OrderNotFoundException.java
+│
+├── domain/                       ← Domain layer (entities, VOs, ports)
+│   ├── model/
+│   │   ├── Order.java            ← Aggregate root
+│   │   ├── Customer.java         ← Aggregate root
+│   │   ├── OrderLine.java        ← Value Object
+│   │   ├── Money.java            ← Value Object
+│   │   ├── EmailAddress.java     ← Value Object
+│   │   ├── Address.java          ← Value Object
+│   │   ├── OrderId.java          ← Identity type
+│   │   ├── CustomerId.java       ← Identity type
+│   │   └── OrderStatus.java      ← Enum
+│   ├── service/
+│   │   └── OrderPlacementService.java  ← Domain service
+│   ├── port/
+│   │   ├── OrderRepository.java  ← Port (interface)
+│   │   └── CustomerRepository.java
+│   └── exception/
+│       └── DomainException.java
+│
+├── infrastructure/               ← Infrastructure layer (adapters)
+│   ├── persistence/
+│   │   ├── JpaOrderRepository.java
+│   │   ├── JpaCustomerRepository.java
+│   │   ├── OrderEntity.java      ← JPA entity (separate from domain)
+│   │   └── OrderLineEntity.java
+│   └── messaging/
+│       └── OrderEventPublisher.java
+│
+└── Main.java                     ← Spring Boot entry point
+```
+
+The dependency rule: **inner layers don't know about outer layers.**
+
+```
+  ┌─────────┐
+  │   API   │  depends on → application, domain
+  ├─────────┤
+  │   App   │  depends on → domain
+  ├─────────┤
+  │ Domain  │  depends on → nothing (pure Java)
+  ├─────────┤
+  │  Infra  │  depends on → domain (implements ports)
+  └─────────┘
+```
+
+Domain is the innermost ring. It doesn't import from Spring, JPA, Jackson, or any framework. This means you can test every business rule with plain JUnit:
+
+```java
+@Test
+void cannotPlaceEmptyOrder() {
+    Order order = new Order(
+        new OrderId(UUID.randomUUID()),
+        new CustomerId(UUID.randomUUID()),
+        new Address("123 Main St", "León", "24001", "Spain")
+    );
+
+    assertThrows(IllegalStateException.class, order::place);
+}
+```
+
+No Spring context. No database. No HTTP. Just the domain.
+
+## 5. Common mistakes and when to avoid DDD
+
+**Mistake 1: Anemic domain model.** Your entities have getters/setters and zero behavior. All business logic lives in "services." This isn't DDD — it's procedural code with fancy class names. If your `Order` class is just a bag of fields and `OrderService` has the `place()` method, you've fallen into the most common trap.
+
+**Mistake 2: Over-engineering.** Every `String` becomes a value object. Every entity gets a repository. You spend two days modeling a `PhoneNumber` type when the business just needs to display it. DDD is for _complex_ domains. If all you do is validate a phone number format, a simple `@Pattern` annotation is fine.
+
+**Mistake 3: Framework-driven design.** You start from Spring Boot and JPA and let them dictate your model. You annotate domain objects with `@Entity`, `@Table`, `@Column`, and suddenly your "domain" depends on Hibernate. The dependency arrow points the wrong way.
+
+**Mistake 4: Perfect modeling before coding.** DDD is iterative. You build a model, test it against real use cases, discover it's wrong, and refactor. Trying to design the perfect domain model upfront is how you end up with UML diagrams nobody implements.
+
+**When to avoid DDD entirely:**
+- Simple CRUD apps (admin panels, dashboards, basic CMS)
+- Data pipelines and ETL jobs
+- Integration glue (microservice that just calls other microservices)
+- Tight-deadline MVPs where the domain isn't clear yet
+
+## 6. Bottom line
+
+DDD isn't about the patterns — it's about the mindset. The patterns (Entities, Value Objects, Aggregates) are tools; the mindset is: _the business problem drives the code structure, not the framework._
+
+Start small. Pick one aggregate in your existing codebase where the business rules are scattered across ten service classes. Extract those rules into the aggregate root. Give methods meaningful names from your domain expert's vocabulary. See if the code gets easier to change.
+
+If it does, you've understood DDD. If it doesn't, the domain might not be complex enough to need it — and that's fine too. The best architecture is the one you don't fight.
+<Quiz slug="domain-driven-design" />

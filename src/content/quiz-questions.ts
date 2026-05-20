@@ -540,6 +540,71 @@ const quizData: Record<string, QuizData> = {
       },
     ],
   },
+  "domain-driven-design": {
+    title: "Test Your Understanding",
+    questions: [
+      {
+        question: "What distinguishes an Entity from a Value Object in DDD?",
+        options: [
+          "Entities are mutable, Value Objects are immutable",
+          "Entities are defined by identity, Value Objects are defined by their attributes",
+          "Entities live in the database, Value Objects are computed on the fly",
+          "Entities have methods, Value Objects only have getters",
+        ],
+        correctIndex: 1,
+        explanation:
+          "The fundamental difference is that Entities have a stable identity that persists through changes. Two customers with identical names, emails, and addresses are still different customers — identity matters. Value Objects, like Money or Address, have no identity: two instances with the same fields are interchangeable. While Entities are typically mutable and Value Objects are typically immutable, that's a consequence of their nature, not the defining characteristic.",
+      },
+      {
+        question: "What is an Aggregate in DDD?",
+        options: [
+          "A collection of all entities stored in the same database table",
+          "A design pattern that combines multiple repository queries into one",
+          "A cluster of domain objects treated as a single unit, accessed only through its aggregate root",
+          "A batch job that recalculates derived values across all records",
+        ],
+        correctIndex: 2,
+        explanation:
+          "An Aggregate is a consistency boundary. It's a cluster of Entities and Value Objects that are always accessed through a single root entity. External code never references objects inside the aggregate directly — all changes go through the root, which enforces the invariants. For example, an Order (root) contains OrderLines; you can't add a line item except by calling order.addLine().",
+      },
+      {
+        question: "Where should cross-aggregate business invariants be enforced?",
+        options: [
+          "Inside the aggregate root, the same as single-aggregate invariants",
+          "In the application layer or a domain service, not inside either aggregate",
+          "In the database using SQL constraints only",
+          "In the API controller before any domain code runs",
+        ],
+        correctIndex: 1,
+        explanation:
+          "Cross-aggregate invariants (e.g., 'a suspended customer cannot place orders') span two aggregates — Customer and Order. Neither aggregate should reach into the other. Instead, the application service loads both aggregates and calls a domain service to enforce the rule. The domain service checks the precondition and then delegates to the aggregate root's method. SQL constraints can provide a safety net but shouldn't be the primary enforcement mechanism.",
+      },
+      {
+        question: "In the DDD layered architecture, which layer should have zero framework dependencies?",
+        options: [
+          "The API layer (controllers, DTOs)",
+          "The Application layer (use cases)",
+          "The Domain layer (entities, value objects, ports)",
+          "The Infrastructure layer (repositories, JPA entities)",
+        ],
+        correctIndex: 2,
+        explanation:
+          "The Domain layer is the innermost ring and should depend on nothing but the standard library. It defines interfaces (ports) for what it needs but never imports Spring, JPA, Jackson, or any framework. This keeps business rules testable with plain JUnit and makes the domain survivable through framework changes. The Infrastructure layer implements those ports using actual frameworks — but the domain never knows about them.",
+      },
+      {
+        question: "Which scenario is the worst fit for Domain-Driven Design?",
+        options: [
+          "An insurance claims processing system with complex state transitions and regulatory rules",
+          "A simple admin dashboard that performs CRUD operations on five database tables",
+          "An e-commerce platform with pricing rules, inventory management, and order fulfillment",
+          "A healthcare scheduling system with complex patient-provider booking logic",
+        ],
+        correctIndex: 1,
+        explanation:
+          "DDD is overkill for simple CRUD applications. If your domain has no complex business rules — just create, read, update, and delete records — you're better off with simpler patterns like Spring Data REST or a thin service layer. DDD shines when business complexity is the core challenge: insurance claims, e-commerce, healthcare, banking. The heuristic: if a domain expert can explain a rule that your code doesn't currently express, you might need DDD.",
+      },
+    ],
+  },
 };
 
 export function getQuizData(slug: string): QuizData | undefined {

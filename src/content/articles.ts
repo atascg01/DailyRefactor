@@ -16,6 +16,23 @@ export interface ArticleMeta {
 
 export const articles: ArticleMeta[] = [
   {
+    id: 9,
+    slug: "domain-driven-design",
+    title: "Domain-Driven Design: Models That Actually Mean Something",
+    excerpt:
+      "Learn what DDD really is, when it makes sense, and how Entities, Value Objects, Aggregates, and Invariants work — with a complete feature walkthrough from domain layer to API.",
+    category: "Architecture",
+    image:
+      "https://images.unsplash.com/photo-1512758017271-d7b84c2113f1?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80",
+    date: "April 15, 2026",
+    readTime: "15 min read",
+    author: {
+      name: "Andres Tascon",
+      avatar: "/images/pic_photo.jpg",
+      role: "Senior Software Engineer @ Oracle",
+    },
+  },
+  {
     id: 8,
     slug: "java-immutability",
     title: "Immutability in Java: Why Your Objects Should Be Stone Tablets, Not Whiteboards",
