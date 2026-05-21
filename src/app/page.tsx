@@ -26,12 +26,37 @@ export default function Home() {
                 Deep dives into software engineering, tools, and best practices
               </p>
             </div>
+            <Link
+              href="/blog"
+              className="hidden sm:inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-[var(--border)]
+                         text-sm font-medium text-[var(--foreground)] hover:border-blue-500/40 hover:text-blue-500
+                         hover:bg-blue-500/5 transition-all group"
+            >
+              View All
+              <svg className="w-4 h-4 transition-transform group-hover:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+              </svg>
+            </Link>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {featuredArticles.map((article) => (
               <ArticleCard key={article.id} {...article} />
             ))}
+          </div>
+
+          <div className="mt-8 text-center sm:hidden">
+            <Link
+              href="/blog"
+              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl border border-[var(--border)]
+                         text-sm font-medium text-[var(--foreground)] hover:border-blue-500/40 hover:text-blue-500
+                         hover:bg-blue-500/5 transition-all group"
+            >
+              View All Articles
+              <svg className="w-4 h-4 transition-transform group-hover:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+              </svg>
+            </Link>
           </div>
         </div>
       </section>
