@@ -16,6 +16,23 @@ export interface ArticleMeta {
 
 export const articles: ArticleMeta[] = [
   {
+    id: 11,
+    slug: "dependency-injection-java",
+    title: "Dependency Injection in Java: Why It Matters Beyond Spring Magic",
+    excerpt:
+      "Learn DI from first principles — constructor vs field injection, interfaces, testability, and why it's a design idea, not a Spring feature.",
+    category: "Java",
+    image:
+      "https://images.unsplash.com/photo-1451187580459-43490279c0fa?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80",
+    date: "April 2, 2026",
+    readTime: "14 min read",
+    author: {
+      name: "Andres Tascon",
+      avatar: "/images/pic_photo.jpg",
+      role: "Senior Software Engineer @ Oracle",
+    },
+  },
+  {
     id: 10,
     slug: "thread-safety-java",
     title: "Thread Safety in Java: Race Conditions, Shared State, and How to Fix Them",

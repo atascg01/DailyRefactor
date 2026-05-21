@@ -11,6 +11,71 @@ export interface QuizData {
 }
 
 const quizData: Record<string, QuizData> = {
+  "dependency-injection-java": {
+    title: "Test Your Understanding",
+    questions: [
+      {
+        question: "What is Dependency Injection?",
+        options: [
+          "A Spring-specific feature that requires @Autowired annotations",
+          "A design principle where an object receives its dependencies from the outside rather than creating them internally",
+          "A pattern where all classes must have a corresponding interface",
+          "A database technique for managing transaction dependencies",
+        ],
+        correctIndex: 1,
+        explanation:
+          "Dependency Injection is a design principle, not a framework feature. It means objects receive what they need through constructors or setters instead of creating dependencies internally with `new`. Spring, Guice, and Dagger implement DI, but you can do DI in plain Java with no framework at all — just pass dependencies into the constructor.",
+      },
+      {
+        question: "Why is constructor injection generally preferred over field injection?",
+        options: [
+          "Because @Autowired is deprecated in Spring 6",
+          "Because constructor injection makes dependencies explicit, supports `final` fields, and works without a DI framework for testing",
+          "Because field injection is slower at runtime",
+          "Because constructor injection requires less code",
+        ],
+        correctIndex: 1,
+        explanation:
+          "Constructor injection puts dependencies right in the constructor signature where anyone can see them. It allows `final` fields (immutability), guarantees the object can't be created in an invalid state, and lets you write tests with `new Service(fakeRepo)` instead of needing Spring's reflection. Field injection hides dependencies and requires framework magic to set private fields.",
+      },
+      {
+        question: "How does DI improve testability?",
+        options: [
+          "It automatically generates test cases for every injected dependency",
+          "It eliminates the need to write tests by making code correct by construction",
+          "It lets you replace real dependencies (databases, HTTP clients) with fake or mock implementations, isolating business logic in tests",
+          "It makes Spring tests run faster by caching the application context",
+        ],
+        correctIndex: 2,
+        explanation:
+          "DI makes testing easy because you can swap real infrastructure dependencies for controlled doubles. Instead of starting PostgreSQL and sending real emails in every test, you inject an in-memory repository and a fake notification sender. Tests run in milliseconds and test business logic, not infrastructure plumbing. Without DI, you'd need the real database for every test because the class creates its own connection internally.",
+      },
+      {
+        question: "Do you need an interface for every injected dependency?",
+        options: [
+          "Yes — Spring requires all injected beans to implement an interface",
+          "Yes — it's a best practice that prevents tight coupling in all cases",
+          "No — interfaces are useful at real seams like external APIs and multiple implementations, but creating `FooService`/`FooServiceImpl` for every class is noise",
+          "No — interfaces are only needed for JPA repositories",
+        ],
+        correctIndex: 2,
+        explanation:
+          "Use interfaces at meaningful boundaries: external systems (payment gateways, message queues), multiple implementations (shipping calculators), or domain abstractions. Don't create `UserService`/`UserServiceImpl` pairs for classes with a single implementation — it's ceremony without value. Mocking frameworks can mock concrete classes directly for testing.",
+      },
+      {
+        question: "What's the problem with `new PostgresUserRepository()` inside a service class?",
+        options: [
+          "It's a syntax error because repository classes must be created by Spring",
+          "It tightly couples the service to PostgreSQL, hides the dependency from the constructor, and makes unit testing impossible without a real database",
+          "It causes a memory leak because the repository is never garbage collected",
+          "Nothing — this is the recommended pattern in modern Java",
+        ],
+        correctIndex: 1,
+        explanation:
+          "Calling `new PostgresUserRepository()` inside a service creates tight coupling — the service is forever tied to PostgreSQL. The dependency is hidden (the constructor has no parameters, so you can't tell the class needs a database). And testing becomes integration testing: every test must connect to a real database. With DI, you pass `UserRepository` (an interface) into the constructor, and tests inject a fake implementation that runs in memory.",
+      },
+    ],
+  },
   "thread-safety-java": {
     title: "Test Your Understanding",
     questions: [

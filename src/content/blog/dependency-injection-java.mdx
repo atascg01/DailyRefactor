@@ -1,0 +1,482 @@
+import Quiz from "@/components/Quiz";
+
+Most Java developers encounter Dependency Injection through Spring. `@Autowired` shows up in a tutorial, you copy it, things work, and you move on. Six months later someone asks in an interview "what problem does DI actually solve?" and the answer is something vague about "not using `new`."
+
+DI isn't Spring magic. It's a design principle that existed long before Spring did — and it solves real problems in real codebases regardless of which framework you use. This article explains DI from first principles, with backend-style examples that'll actually help you in interviews and code reviews.
+
+## Table of Contents
+
+- [1. What Is Dependency Injection?](#1-what-is-dependency-injection)
+- [2. Why Creating Dependencies Internally Is a Problem](#2-why-creating-dependencies-internally-is-a-problem)
+- [3. Constructor Injection](#3-constructor-injection)
+- [4. Field Injection](#4-field-injection)
+- [5. Setter Injection](#5-setter-injection)
+- [6. Interfaces and Testability](#6-interfaces-and-testability)
+- [7. DI and Unit Testing](#7-di-and-unit-testing)
+- [8. DI vs Service Locator](#8-di-vs-service-locator)
+- [9. DI in Spring](#9-di-in-spring)
+- [10. DI and Architecture](#10-di-and-architecture)
+- [11. Common Mistakes](#11-common-mistakes)
+- [12. Interview Questions](#12-interview-questions)
+- [13. Conclusion](#13-conclusion)
+
+## 1. What Is Dependency Injection?
+
+A **dependency** is anything your class needs to do its job. If `PaymentService` calls `PaymentRepository` to save data, then `PaymentRepository` is a dependency of `PaymentService`.
+
+**Dependency Injection** means your class receives its dependencies from the outside instead of creating them internally. That's it. No framework, no annotations, no XML — just a design choice about how objects get what they need.
+
+Here's the bad version:
+
+```java
+public class PaymentService {
+    private final PaymentRepository repository;
+
+    public PaymentService() {
+        this.repository = new PostgresPaymentRepository(); // ← creates its own dependency
+    }
+
+    public void processPayment(Payment payment) {
+        repository.save(payment);
+    }
+}
+```
+
+And here's the DI version:
+
+```java
+public class PaymentService {
+    private final PaymentRepository repository;
+
+    public PaymentService(PaymentRepository repository) { // ← injected from outside
+        this.repository = repository;
+    }
+
+    public void processPayment(Payment payment) {
+        repository.save(payment);
+    }
+}
+```
+
+Same class, same behavior — but the second version doesn't know or care whether the repository talks to PostgreSQL, an in-memory map, or a CSV file. It's also testable: you can pass in a fake repository and test `processPayment` without a database.
+
+That one change — passing a dependency in instead of `new`-ing it internally — is the core idea. Everything else (frameworks, containers, annotations) is just infrastructure to do this at scale.
+
+## 2. Why Creating Dependencies Internally Is a Problem
+
+"We only use PostgreSQL. Why would I ever need a different `PaymentRepository`?" Three reasons:
+
+**Tight coupling.** When `PaymentService` calls `new PostgresPaymentRepository()`, it's permanently married to that implementation. If six months from now the team decides to add Redis caching or switch to jOOQ, every class that called `new Postgres...` needs to change. The service shouldn't know about infrastructure choices at all.
+
+**Hidden dependencies.** Look at the constructor of the bad version: `public PaymentService()`. No parameters. You'd never guess it needs a database connection, connection pool configuration, and schema migrations just to exist. DI makes dependencies explicit — they're right there in the constructor signature.
+
+**Untestable code.** This is the killer. Try unit-testing the bad version:
+
+```java
+@Test
+void testProcessPayment() {
+    PaymentService service = new PaymentService();
+    // Uh oh — this tries to connect to a real PostgreSQL database
+    service.processPayment(new Payment(...));
+}
+```
+
+You can't test `PaymentService` without a running database. For a backend service with dozens of classes, that means your "unit" tests become integration tests that need Docker Compose, take 30 seconds to start, and break when someone changes the schema. DI fixes this instantly: pass in a fake repository and test the actual business logic in milliseconds.
+
+**Real backend examples of dependencies you should inject:**
+
+```java
+// ❌ Tightly coupled                               // ✅ Injected
+new RestTemplate()                                   // RestClient / WebClient
+new KafkaProducer<>(config)                          // KafkaTemplate
+Instant.now()                                        // Clock
+new BCryptPasswordEncoder()                          // PasswordEncoder
+new S3Client()                                       // S3Client
+Files.readString(Path.of("config.json"))             // Some Config interface
+```
+
+`Clock` is a great example. Your service uses `Instant.now()` to timestamp transactions. Hard to test: the timestamp changes every millisecond. Inject a `Clock` and your test passes `Clock.fixed(...)` — now the timestamp is deterministic and your assertions work.
+
+## 3. Constructor Injection
+
+Constructor injection is the gold standard for required dependencies. The idea is simple: pass everything the class needs through the constructor and store it in `final` fields.
+
+```java
+public class OrderService {
+    private final OrderRepository orderRepository;
+    private final PaymentGateway paymentGateway;
+    private final NotificationSender notificationSender;
+    private final Clock clock;
+
+    public OrderService(
+            OrderRepository orderRepository,
+            PaymentGateway paymentGateway,
+            NotificationSender notificationSender,
+            Clock clock
+    ) {
+        this.orderRepository = orderRepository;
+        this.paymentGateway = paymentGateway;
+        this.notificationSender = notificationSender;
+        this.clock = clock;
+    }
+
+    public OrderResult placeOrder(OrderRequest request) {
+        // Business logic using injected dependencies
+        Order order = Order.create(request, clock.instant());
+        paymentGateway.charge(request.paymentDetails(), request.amount());
+        orderRepository.save(order);
+        notificationSender.sendOrderConfirmation(order);
+        return new OrderResult(order.getId());
+    }
+}
+```
+
+**Benefits:**
+
+- **Dependencies are explicit.** You can look at the constructor and immediately know everything the class needs. Four parameters? This class does four things. That's useful information.
+- **Object can't exist in an invalid state.** You can't create an `OrderService` without an `OrderRepository`. The compiler enforces it.
+- **Works with `final` fields.** Every injected dependency can be `final`, which makes the class easier to reason about — no field changes after construction.
+- **No framework required for testing.** `new OrderService(fakeRepo, fakeGateway, fakeSender, fixedClock)` — done. No Spring context, no mocking library, no magic.
+
+**When the constructor gets too long** (5+ parameters), it's not a DI problem — it's a design smell. Your class does too much. Split it, group related dependencies into a cohesive object, or introduce a facade.
+
+## 4. Field Injection
+
+Field injection is what most Spring devs encounter first:
+
+```java
+@Service
+public class PaymentService {
+    @Autowired
+    private PaymentRepository repository;  // ← field injection
+
+    @Autowired
+    private NotificationSender notifier;
+
+    public void processPayment(Payment payment) {
+        repository.save(payment);
+        notifier.sendConfirmation(payment);
+    }
+}
+```
+
+Spring's reflection magic sets `repository` and `notifier` after the object is constructed, bypassing the `private` modifier.
+
+**Why it's popular:** less boilerplate. No constructor, no assignments. Looks clean at first glance.
+
+**Why it's problematic:**
+
+- **Dependencies are hidden.** The constructor is empty. You have to read every field to know what the class depends on. With 8 injected fields, that's noise.
+- **Harder to test without Spring.** You can't just `new PaymentService(repo, notifier)`. You need reflection to set private fields, or you need `@SpringBootTest` which starts the whole application context.
+- **Partially initialized objects.** Between constructor completion and field injection, the object exists with `null` fields. If any code runs in that window (e.g., a `@PostConstruct` in a superclass), you get `NullPointerException`.
+- **Framework lock-in.** The class only works in a Spring context. You can't reuse it in a standalone utility, a script, or a different framework without adding reflection hacks.
+
+Constructor injection has been the Spring team's recommendation since 4.x. Use it. Field injection works, but every senior engineer who's maintained a large codebase will tell you the same thing: constructor injection ages better.
+
+## 5. Setter Injection
+
+Setter injection provides dependencies through setter methods:
+
+```java
+public class ReportGenerator {
+    private OutputFormatter formatter;
+    private String reportTitle = "Default Report";
+
+    public void setFormatter(OutputFormatter formatter) {
+        this.formatter = formatter;
+    }
+
+    public void setReportTitle(String reportTitle) {
+        this.reportTitle = reportTitle;
+    }
+
+    public Report generate(Data data) {
+        // uses formatter and reportTitle
+    }
+}
+```
+
+**When it makes sense:**
+
+- **Optional dependencies.** Maybe `OutputFormatter` defaults to `PlainTextFormatter` but callers can override it.
+- **Mutable configuration.** `reportTitle` might come from a user preference that changes at runtime.
+- **Legacy integration.** Some older frameworks or libraries provide dependencies through setters and you have to work with that pattern.
+
+**When it doesn't:**
+
+- **Required dependencies.** If `ReportGenerator` doesn't work without `OutputFormatter`, make it a constructor parameter. Setter injection for required dependencies creates a window where the object is in an invalid state (formatter is null). A `NullPointerException` at runtime is worse than a compile-time error from a missing constructor argument.
+
+**Rule of thumb:** constructor injection for required dependencies, setters for truly optional ones.
+
+## 6. Interfaces and Testability
+
+DI pairs naturally with interfaces, but you don't need an interface for every class. Use interfaces at meaningful seams — boundaries between your code and external systems, or places where you genuinely need multiple implementations.
+
+```java
+public interface PaymentGateway {
+    PaymentResult charge(PaymentDetails details, Money amount);
+}
+
+public class StripePaymentGateway implements PaymentGateway {
+    @Override
+    public PaymentResult charge(PaymentDetails details, Money amount) {
+        // Calls Stripe API
+    }
+}
+
+public class FakePaymentGateway implements PaymentGateway {
+    private final List<Charge> charges = new ArrayList<>();
+
+    @Override
+    public PaymentResult charge(PaymentDetails details, Money amount) {
+        charges.add(new Charge(details, amount));
+        return PaymentResult.success("fake-charge-id");
+    }
+
+    public List<Charge> getCharges() { return charges; }
+}
+```
+
+Now your service depends on the interface, not Stripe:
+
+```java
+public PaymentService(PaymentGateway gateway, ...) { ... }
+```
+
+Production gets `StripePaymentGateway`. Tests get `FakePaymentGateway`. The business logic in `PaymentService` never changes. If you switch from Stripe to Adyen next year, you write one new implementation — the rest of the codebase doesn't know anything happened.
+
+**When to use an interface:** real seams. External APIs (`PaymentGateway`, `EmailSender`, `StorageService`), multiple implementations (`ShippingCalculator` with different carriers), or a domain boundary that justifies abstraction (`PricingStrategy`, `DiscountRule`).
+
+**When NOT to use an interface:** service classes that have exactly one implementation and no external boundary. Don't create `UserService` / `UserServiceImpl`. It's noise. If you need to test code that calls `UserService`, mock it with Mockito — you don't need the interface. Interfaces should earn their keep.
+
+## 7. DI and Unit Testing
+
+Here's the magic of DI in a real test. No database, no network, no Spring context — just the business logic:
+
+```java
+class PaymentServiceTest {
+    private final InMemoryPaymentRepository repository = new InMemoryPaymentRepository();
+    private final FakeNotificationSender notifier = new FakeNotificationSender();
+    private final FakePaymentGateway gateway = new FakePaymentGateway();
+    private final Clock fixedClock = Clock.fixed(
+        Instant.parse("2026-04-02T10:00:00Z"), ZoneOffset.UTC
+    );
+
+    private final PaymentService service = new PaymentService(
+        repository, gateway, notifier, fixedClock
+    );
+
+    @Test
+    void shouldSavePaymentAndSendConfirmation() {
+        Payment payment = new Payment("tx-1", new Money("99.99", EUR));
+
+        service.processPayment(payment);
+
+        assertThat(repository.findById("tx-1")).isPresent();
+        assertThat(notifier.sentConfirmations()).contains("tx-1");
+    }
+
+    @Test
+    void shouldRejectPaymentWhenGatewayFails() {
+        gateway.willFail(true);  // ← configure the fake
+        Payment payment = new Payment("tx-2", new Money("50.00", EUR));
+
+        assertThrows(PaymentFailedException.class,
+            () -> service.processPayment(payment));
+
+        assertThat(repository.findById("tx-2")).isEmpty();
+        assertThat(notifier.sentConfirmations()).doesNotContain("tx-2");
+    }
+}
+```
+
+This test runs in milliseconds. It tests real behavior — "does the service save the payment and notify when the gateway succeeds?" and "does it roll back when the gateway fails?" — without a database, without Stripe, and without Spring Boot's 10-second startup.
+
+That's what DI buys you: isolating the logic you care about from the infrastructure you don't.
+
+## 8. DI vs Service Locator
+
+The Service Locator pattern is DI's historical rival. Instead of receiving dependencies, objects ask a global registry for what they need:
+
+```java
+public class PaymentService {
+    public void processPayment(Payment payment) {
+        PaymentRepository repo = ServiceLocator.get(PaymentRepository.class);
+        NotificationSender notifier = ServiceLocator.get(NotificationSender.class);
+        repo.save(payment);
+        notifier.sendConfirmation(payment);
+    }
+}
+```
+
+**Why this is worse than DI:**
+
+- **Hidden dependencies.** The constructor tells you nothing. You have to read every method to discover what the class needs.
+- **Runtime failures.** If `ServiceLocator.get(PaymentRepository.class)` returns null because nobody registered it, you find out at runtime — probably in production. With constructor injection, the compiler catches it.
+- **Hard to test.** You have to either mock a global static registry or configure the locator before each test. It's brittle.
+- **Implicit global state.** The locator is a hidden parameter to every method. Thread safety, test isolation, and reasoning about code all get harder.
+
+With DI, the dependencies are right there in the constructor. You can see them, control them, and replace them. Service Locator hides everything behind a static call.
+
+## 9. DI in Spring
+
+Spring doesn't invent DI — it automates the wiring. You annotate classes, and Spring's application context creates them and connects dependencies:
+
+```java
+@Repository
+public class JpaOrderRepository implements OrderRepository {
+    private final JpaOrderEntityRepository jpa;
+
+    public JpaOrderRepository(JpaOrderEntityRepository jpa) {
+        this.jpa = jpa;
+    }
+    // ...
+}
+
+@Service
+public class OrderService {
+    private final OrderRepository orderRepository;
+    private final PaymentGateway paymentGateway;
+
+    // Spring 4.3+: @Autowired is optional on single-constructor classes
+    public OrderService(OrderRepository orderRepository, PaymentGateway paymentGateway) {
+        this.orderRepository = orderRepository;
+        this.paymentGateway = paymentGateway;
+    }
+    // ...
+}
+```
+
+Spring scans for `@Service`, `@Repository`, `@Component` annotations, discovers the dependency graph, and calls the constructors in the right order. You get DI without manually wiring a hundred classes together.
+
+But Spring is just the tooling. The design principle — "pass dependencies in, don't create them internally" — works with any DI framework (Guice, Dagger, Micronaut), a hand-rolled factory, or even plain `main()`:
+
+```java
+public static void main(String[] args) {
+    var repo = new PostgresOrderRepository(dataSource);
+    var gateway = new StripePaymentGateway(apiKey);
+    var service = new OrderService(repo, gateway); // ← DI, no framework
+    new OrderController(service).start(8080);
+}
+```
+
+That's DI. The annotations and application context are convenience, not the concept.
+
+## 10. DI and Architecture
+
+DI enables clean layered architecture by making dependencies flow in one direction:
+
+```
+Controller layer         depends on →   Service layer
+Service layer            depends on →   Domain logic + interfaces
+Infrastructure layer     implements →   Interfaces defined above
+```
+
+The service depends on an interface like `AccountRepository`. The actual database implementation lives in the infrastructure layer and is wired in at startup. The service never imports PostgreSQL-specific code:
+
+```java
+// ── Domain / service layer ──
+public interface AccountRepository {
+    Optional<Account> findById(AccountId id);
+    void save(Account account);
+}
+
+// ── Infrastructure layer ──
+@Repository
+public class PostgresAccountRepository implements AccountRepository {
+    private final JdbcTemplate jdbc;
+
+    public PostgresAccountRepository(JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    @Override
+    public Optional<Account> findById(AccountId id) {
+        return jdbc.query("SELECT * FROM accounts WHERE id = ?", rowMapper, id.value())
+            .stream().findFirst();
+    }
+}
+```
+
+**Real implications for product development:**
+
+- Your team gets acquired and told to use AWS DynamoDB instead of PostgreSQL. You write one new `DynamoAccountRepository`, wire it in, done. The service layer (which contains all the business logic) doesn't change.
+- QA wants a read-only environment for load testing. You wire in `ReadOnlyAccountRepository` that talks to a read replica. No code changes in services.
+- Onboarding new developers. They open `AccountService.java`, see four dependencies in the constructor, and immediately understand what the class does without tracing through factory methods or Spring magic.
+
+DI makes the architecture explicit. The dependency graph isn't hidden in XML files or reflection — it's encoded in constructors, visible to anyone reading the code.
+
+## 11. Common Mistakes
+
+**Too many constructor parameters.** If your constructor has 8 parameters, your class does too much. Split it, or group related dependencies:
+
+```java
+// ❌ Constructor sprawl
+public OrderService(
+    OrderRepository orders, PaymentGateway payments,
+    NotificationSender notifier, InvoiceGenerator invoices,
+    AuditLogger audit, MetricsRecorder metrics,
+    FeatureFlags flags, Clock clock
+) { ... }
+
+// ✅ Grouped
+public OrderService(
+    OrderProcessingDeps deps,      // orders + payments + invoices
+    NotificationDeps notifications // notifier + audit
+) { ... }
+```
+
+**Interface for everything.** Not every class needs an interface. `UserService` / `UserServiceImpl` is noise. Create interfaces when you have a real seam: external systems, multiple implementations, or a domain abstraction.
+
+**Field injection everywhere.** Spring makes it easy, but it's the wrong default. Constructor injection catches missing dependencies at compile time, not at production startup.
+
+**Hiding dependencies behind static helpers.** `Database.getConnection()`, `Config.get("api.key")`, `EmailSenderFactory.getInstance()` — these are global state disguised as utility methods. They make testing painful and hide what your code actually depends on.
+
+**Overusing mocks.** DI makes it possible to mock everything, but mocking everything is also bad. Test behavior, not implementation. If you have 10 mocks in a test, the test is telling you the class does too much.
+
+**Treating DI as a Spring-only feature.** "We can't use DI because we're not using Spring." DI works in plain Java, in Quarkus, in Micronaut, in a Kotlin script — anywhere you can pass an argument to a constructor.
+
+## 12. Interview Questions
+
+**What is Dependency Injection?**
+
+DI is a design principle where an object receives its dependencies from the outside rather than creating them internally. Instead of calling `new Collaborator()` inside a class, you pass the collaborator through the constructor (or setter). The goal is to make dependencies explicit, configurable, and replaceable.
+
+**Why is DI useful?**
+
+It decouples classes from their dependencies, making code easier to test (you can inject fakes), easier to change (swap implementations without touching the dependent class), and easier to understand (dependencies are visible in the constructor signature).
+
+**Constructor injection vs field injection?**
+
+Constructor injection makes required dependencies explicit as constructor parameters, allows `final` fields, and works without a framework. Field injection (`@Autowired` on fields) hides dependencies, requires reflection, and ties your class to a DI container. Constructor injection is preferred.
+
+**How does DI help testing?**
+
+DI lets you replace real dependencies (databases, HTTP clients, message brokers) with fake or mock implementations in tests. Instead of spinning up infrastructure for every test, you pass in controlled objects and test business logic in isolation.
+
+**What is tight coupling?**
+
+Tight coupling means one class depends directly on a specific implementation of another class. `new PostgresUserRepository()` inside a service ties that service to PostgreSQL forever — you can't swap it without changing the service code. DI breaks tight coupling by depending on abstractions (interfaces) that any implementation can satisfy.
+
+**Do you need an interface for every dependency?**
+
+No. Interfaces are useful at real seams: external systems (payment gateways, message queues), multiple implementations, or domain abstractions. Creating `XxxService` / `XxxServiceImpl` pairs for every class is pointless boilerplate. Mocking frameworks like Mockito can mock concrete classes directly.
+
+**What's the difference between DI and Service Locator?**
+
+DI makes dependencies explicit — they're constructor parameters. Service Locator hides dependencies behind a global static registry (`ServiceLocator.get(Foo.class)`). DI catches missing dependencies at compile time; Service Locator fails at runtime. DI makes code testable by design; Service Locator requires global state management in tests.
+
+**How does Spring use DI?**
+
+Spring's application context manages an object graph. It scans for annotated classes (`@Service`, `@Repository`, `@Component`), discovers dependencies through constructors, and wires everything together at startup. The `@Autowired` annotation tells Spring which dependencies to inject. Spring automates DI — it doesn't invent the concept.
+
+## 13. Conclusion
+
+Dependency Injection isn't about which annotation you use. It's about a single design choice: **give objects what they need instead of making them find it themselves.**
+
+Constructor injection should be your default for required dependencies. It makes code self-documenting, testable, and framework-agnostic. Field injection works but creates hidden coupling to your DI container. Setter injection has a niche for optional or mutable dependencies but shouldn't be the primary strategy.
+
+The real payoff shows up over time. A codebase with clean DI is easier to change: swap Stripe for Adyen, PostgreSQL for DynamoDB, real email for a test double — all without touching business logic. It's easier to test: unit tests run in milliseconds because they don't start databases or HTTP servers. It's easier to onboard developers: they open a class, read the constructor, and understand the dependencies immediately.
+
+Use interfaces at real boundaries, not as ceremony. Avoid static state and global registries. And remember: DI is a design idea, not a Spring feature. You can do it in any Java project — with or without `@Autowired`.
+<Quiz slug="dependency-injection-java" />
