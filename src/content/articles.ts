@@ -23,7 +23,7 @@ export const articles: ArticleMeta[] = [
       "Understand thread safety from first principles — race conditions, shared mutable state, and five practical fixes from `volatile` to database locking. Complete fintech wallet example included.",
     category: "Java",
     image:
-      "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80",
+      "https://images.unsplash.com/photo-1555949963-aa79dcee981c?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80",
     date: "April 9, 2026",
     readTime: "16 min read",
     author: {
