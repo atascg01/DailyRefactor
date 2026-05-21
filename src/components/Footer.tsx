@@ -71,6 +71,11 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
+                <Link href="/quiz" className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
+                  Quiz
+                </Link>
+              </li>
+              <li>
                 <Link href="/about" className="text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors">
                   About
                 </Link>
