@@ -15,7 +15,6 @@ interface Category {
 export default function QuizPageContent() {
   const [phase, setPhase] = useState<"select" | "quiz" | "results">("select");
   const [selectedSlugs, setSelectedSlugs] = useState<Set<string>>(new Set());
-  const [examTitle, setExamTitle] = useState<string>("");
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<"correct" | "wrong" | null>(null);
@@ -163,22 +162,6 @@ export default function QuizPageContent() {
           </p>
         </div>
 
-        {/* Exam Title (optional) */}
-        <div className="mb-8">
-          <label className="block text-sm font-medium text-[var(--muted-foreground)] mb-2">
-            Name your exam (optional)
-          </label>
-          <input
-            type="text"
-            value={examTitle}
-            onChange={(e) => setExamTitle(e.target.value)}
-            placeholder='e.g. "Java + Architecture interview prep"'
-            className="w-full max-w-md px-4 py-2.5 rounded-xl border border-[var(--border)] 
-                       bg-[var(--background)] text-sm placeholder:text-[var(--muted-foreground)]
-                       focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
-          />
-        </div>
-
         {/* All Topics toggle */}
         <button
           onClick={toggleAll}
@@ -317,9 +300,6 @@ export default function QuizPageContent() {
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-24">
         <div className="text-center mb-12">
           <div className="text-6xl mb-4">{emoji}</div>
-          {examTitle && (
-            <p className="text-sm text-[var(--muted-foreground)] mb-2">{examTitle}</p>
-          )}
           <h1 className="text-3xl font-bold mb-2">Quiz Complete!</h1>
           <div className="text-5xl font-bold text-blue-500 mb-3">
             {correctCount}/{questions.length}
@@ -410,10 +390,6 @@ export default function QuizPageContent() {
           {currentIndex + 1} of {questions.length}
         </span>
       </div>
-
-      {examTitle && (
-        <p className="text-xs text-[var(--muted-foreground)] mb-4">{examTitle}</p>
-      )}
 
       {/* Progress bar */}
       <div className="w-full h-2 bg-[var(--border)] rounded-full mb-8 overflow-hidden">
