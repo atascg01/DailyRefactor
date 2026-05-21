@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { articles } from "@/content/articles";
 import { getQuizData, type QuizQuestion } from "@/content/quiz-questions";
@@ -14,7 +14,8 @@ interface Category {
 
 export default function QuizPageContent() {
   const [phase, setPhase] = useState<"select" | "quiz" | "results">("select");
-  const [selectedSlug, setSelectedSlug] = useState<string>("all");
+  const [selectedSlugs, setSelectedSlugs] = useState<Set<string>>(new Set());
+  const [examTitle, setExamTitle] = useState<string>("");
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<"correct" | "wrong" | null>(null);
@@ -42,24 +43,40 @@ export default function QuizPageContent() {
     [categories],
   );
 
-  // Build questions array for the selected category (or all)
-  const questions: QuizQuestion[] = useMemo(() => {
-    if (selectedSlug === "all") {
-      const all: QuizQuestion[] = [];
-      for (const cat of categories) {
+  const allSelected = selectedSlugs.size === categories.length && categories.length > 0;
+
+  const selectedQuestionCount = useMemo(() => {
+    if (allSelected) return totalQuestions;
+    return categories
+      .filter((c) => selectedSlugs.has(c.slug))
+      .reduce((sum, c) => sum + c.questionCount, 0);
+  }, [selectedSlugs, categories, totalQuestions, allSelected]);
+
+  // Build questions array from selected slugs
+  const buildQuestions = useCallback(
+    (slugs: Set<string>): QuizQuestion[] => {
+      const allSelected = slugs.size === categories.length && categories.length > 0;
+      const selectedCats = allSelected
+        ? categories
+        : categories.filter((c) => slugs.has(c.slug));
+
+      const qs: QuizQuestion[] = [];
+      for (const cat of selectedCats) {
         const quiz = getQuizData(cat.slug);
-        if (quiz) all.push(...quiz.questions);
+        if (quiz) qs.push(...quiz.questions);
       }
+
       // Shuffle
-      for (let i = all.length - 1; i > 0; i--) {
+      for (let i = qs.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        [all[i], all[j]] = [all[j], all[i]];
+        [qs[i], qs[j]] = [qs[j], qs[i]];
       }
-      return all;
-    }
-    const quiz = getQuizData(selectedSlug);
-    return quiz ? [...quiz.questions] : [];
-  }, [selectedSlug, categories]);
+      return qs;
+    },
+    [categories],
+  );
+
+  const [questions, setQuestions] = useState<QuizQuestion[]>([]);
 
   const question = questions[currentIndex];
   const isComplete = currentIndex >= questions.length;
@@ -87,23 +104,42 @@ export default function QuizPageContent() {
     setCurrentIndex((prev) => prev + 1);
   };
 
-  const startQuiz = (slug: string) => {
-    setSelectedSlug(slug);
-    const qs = slug === "all"
-      ? categories.reduce<QuizQuestion[]>((acc, c) => {
-          const q = getQuizData(c.slug);
-          return q ? [...acc, ...q.questions] : acc;
-        }, [])
-      : getQuizData(slug)?.questions ?? [];
-
-    // Shuffle if all
-    if (slug === "all") {
-      for (let i = qs.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [qs[i], qs[j]] = [qs[j], qs[i]];
+  const toggleSlug = (slug: string) => {
+    setSelectedSlugs((prev) => {
+      const next = new Set(prev);
+      if (next.has(slug)) {
+        next.delete(slug);
+      } else {
+        next.add(slug);
       }
-    }
+      return next;
+    });
+  };
 
+  const toggleAll = () => {
+    if (allSelected) {
+      setSelectedSlugs(new Set());
+    } else {
+      setSelectedSlugs(new Set(categories.map((c) => c.slug)));
+    }
+  };
+
+  const startExam = () => {
+    const slugs = allSelected
+      ? new Set(categories.map((c) => c.slug))
+      : selectedSlugs;
+    const qs = buildQuestions(slugs);
+    setQuestions(qs);
+    setScores(Array(qs.length).fill(false));
+    setCurrentIndex(0);
+    setSelected(null);
+    setFeedback(null);
+    setPhase("quiz");
+  };
+
+  const startSingleTopic = (slug: string) => {
+    const qs = buildQuestions(new Set([slug]));
+    setQuestions(qs);
     setScores(Array(qs.length).fill(false));
     setCurrentIndex(0);
     setSelected(null);
@@ -117,61 +153,147 @@ export default function QuizPageContent() {
   if (phase === "select") {
     return (
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-24">
-        <div className="text-center mb-12">
+        <div className="text-center mb-10">
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-4">
             Interview Prep Quiz
           </h1>
           <p className="text-lg text-[var(--muted-foreground)] max-w-2xl mx-auto">
-            {totalQuestions} questions across {categories.length} topics. Pick a category or tackle them all — 
-            it's the same format as real technical interview questions.
+            Select one or more topics to build your custom exam.{" "}
+            {totalQuestions} questions across {categories.length} topics — same format as real technical interviews.
           </p>
         </div>
 
-        {/* All Topics card */}
+        {/* Exam Title (optional) */}
+        <div className="mb-8">
+          <label className="block text-sm font-medium text-[var(--muted-foreground)] mb-2">
+            Name your exam (optional)
+          </label>
+          <input
+            type="text"
+            value={examTitle}
+            onChange={(e) => setExamTitle(e.target.value)}
+            placeholder='e.g. "Java + Architecture interview prep"'
+            className="w-full max-w-md px-4 py-2.5 rounded-xl border border-[var(--border)] 
+                       bg-[var(--background)] text-sm placeholder:text-[var(--muted-foreground)]
+                       focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+          />
+        </div>
+
+        {/* All Topics toggle */}
         <button
-          onClick={() => startQuiz("all")}
-          className="w-full text-left p-6 rounded-2xl border-2 border-blue-500/40 bg-blue-500/5 
-                     hover:border-blue-500 hover:bg-blue-500/10 transition-all mb-4 group"
+          onClick={toggleAll}
+          className={`w-full text-left p-5 rounded-2xl border-2 transition-all mb-2 group ${
+            allSelected
+              ? "border-blue-500 bg-blue-500/5"
+              : "border-[var(--border)] hover:border-blue-500/30 hover:bg-[var(--accent)]"
+          }`}
         >
-          <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <span
+              className={`flex-shrink-0 w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${
+                allSelected
+                  ? "border-blue-500 bg-blue-500"
+                  : "border-[var(--border)] group-hover:border-blue-500/50"
+              }`}
+            >
+              {allSelected && (
+                <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+            </span>
             <div>
-              <h3 className="text-xl font-bold mb-1 group-hover:text-blue-500 transition-colors">
+              <h3 className="text-lg font-bold group-hover:text-blue-500 transition-colors">
                 🎯 All Topics
               </h3>
               <p className="text-sm text-[var(--muted-foreground)]">
-                Shuffled mix of all {totalQuestions} questions — full interview simulation
+                {totalQuestions} questions — full interview simulation
               </p>
-            </div>
-            <div className="flex items-center gap-2 text-blue-500 font-medium">
-              <span>{totalQuestions} questions</span>
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-              </svg>
             </div>
           </div>
         </button>
 
-        {/* Individual categories */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {categories.map((cat) => (
-            <button
-              key={cat.slug}
-              onClick={() => startQuiz(cat.slug)}
-              className="text-left p-5 rounded-xl border border-[var(--border)] 
-                         hover:border-blue-500/40 hover:bg-[var(--accent)] transition-all group"
-            >
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
-                               bg-blue-500/10 text-blue-500 border border-blue-500/20 mb-2">
-                {cat.category}
+        {/* Topic cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+          {categories.map((cat) => {
+            const isSelected = selectedSlugs.has(cat.slug);
+            return (
+              <button
+                key={cat.slug}
+                onClick={() => toggleSlug(cat.slug)}
+                className={`text-left p-5 rounded-xl border-2 transition-all group ${
+                  isSelected
+                    ? "border-blue-500 bg-blue-500/5"
+                    : "border-[var(--border)] hover:border-blue-500/30 hover:bg-[var(--accent)]"
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <span
+                    className={`flex-shrink-0 w-5 h-5 mt-0.5 rounded-md border-2 flex items-center justify-center transition-all ${
+                      isSelected
+                        ? "border-blue-500 bg-blue-500"
+                        : "border-[var(--border)] group-hover:border-blue-500/50"
+                    }`}
+                  >
+                    {isSelected && (
+                      <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
+                                     bg-blue-500/10 text-blue-500 border border-blue-500/20 mb-2">
+                      {cat.category}
+                    </span>
+                    <h3 className="font-semibold mb-1">{cat.title}</h3>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-[var(--muted-foreground)]">
+                        {cat.questionCount} questions
+                      </p>
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          startSingleTopic(cat.slug);
+                        }}
+                        className="text-xs text-blue-500 hover:text-blue-600 font-medium px-2 py-1 
+                                   rounded-lg hover:bg-blue-500/10 transition-colors"
+                      >
+                        Quick start →
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Start exam button */}
+        <div className="mt-10 text-center">
+          <button
+            onClick={startExam}
+            disabled={selectedSlugs.size === 0 && !allSelected}
+            className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl text-sm font-semibold
+                       bg-blue-500 text-white hover:bg-blue-600 transition-all
+                       shadow-lg shadow-blue-500/25 hover:shadow-xl hover:shadow-blue-500/30
+                       disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+            Start Exam
+            {selectedSlugs.size > 0 && !allSelected && (
+              <span className="ml-1 opacity-80">
+                ({selectedQuestionCount} questions)
               </span>
-              <h3 className="font-semibold mb-1 group-hover:text-blue-500 transition-colors">
-                {cat.title}
-              </h3>
-              <p className="text-sm text-[var(--muted-foreground)]">
-                {cat.questionCount} questions
-              </p>
-            </button>
-          ))}
+            )}
+          </button>
+          {selectedSlugs.size === 0 && (
+            <p className="text-xs text-[var(--muted-foreground)] mt-3">
+              Select at least one topic to start, or use &quot;Quick start&quot; on any card
+            </p>
+          )}
         </div>
 
         <div className="mt-12 text-center">
@@ -195,6 +317,9 @@ export default function QuizPageContent() {
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-24">
         <div className="text-center mb-12">
           <div className="text-6xl mb-4">{emoji}</div>
+          {examTitle && (
+            <p className="text-sm text-[var(--muted-foreground)] mb-2">{examTitle}</p>
+          )}
           <h1 className="text-3xl font-bold mb-2">Quiz Complete!</h1>
           <div className="text-5xl font-bold text-blue-500 mb-3">
             {correctCount}/{questions.length}
@@ -210,7 +335,7 @@ export default function QuizPageContent() {
           </p>
           <div className="flex items-center justify-center gap-3 mt-6">
             <button
-              onClick={() => startQuiz(selectedSlug)}
+              onClick={startExam}
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg 
                          bg-[var(--foreground)] text-[var(--background)] text-sm font-medium
                          hover:opacity-90 transition-opacity"
@@ -285,6 +410,10 @@ export default function QuizPageContent() {
           {currentIndex + 1} of {questions.length}
         </span>
       </div>
+
+      {examTitle && (
+        <p className="text-xs text-[var(--muted-foreground)] mb-4">{examTitle}</p>
+      )}
 
       {/* Progress bar */}
       <div className="w-full h-2 bg-[var(--border)] rounded-full mb-8 overflow-hidden">
