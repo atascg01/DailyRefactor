@@ -39,6 +39,9 @@ export default function NewsletterForm() {
       >
         Subscribe
       </button>
+      <p className="text-xs text-[var(--muted-foreground)] mt-0 sm:mt-1 sm:absolute sm:bottom-[-1.75rem] sm:left-0">
+        No spam, unsubscribe anytime.
+      </p>
     </form>
   );
 }

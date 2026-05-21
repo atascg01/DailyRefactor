@@ -1,6 +1,10 @@
 import Image from "next/image";
 import Link from "next/link";
 
+function getCategorySlug(category: string): string {
+  return category.toLowerCase().replace(/\s+/g, "-");
+}
+
 interface ArticleCardProps {
   slug: string;
   title: string;
@@ -38,10 +42,15 @@ export default function ArticleCard({ slug, title, excerpt, category, date, read
         {/* Content */}
         <div className="p-5 flex flex-col flex-grow">
           <div className="flex items-center gap-3 mb-3">
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
-                           bg-blue-500/10 text-blue-500 border border-blue-500/20">
+            <Link
+              href={`/blog/category/${getCategorySlug(category)}`}
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
+                           bg-blue-500/10 text-blue-500 border border-blue-500/20
+                           hover:bg-blue-500/20 transition-colors"
+            >
               {category}
-            </span>
+            </Link>
             <span className="text-xs text-[var(--muted-foreground)]">{readTime}</span>
           </div>
 

@@ -4,8 +4,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getArticleBySlug, articles } from "@/content/articles";
 import ShareSection from "@/components/ShareSection";
+import ShareTop from "@/components/ShareTop";
 import JsonLd from "@/components/JsonLd";
 import TableOfContents from "@/components/TableOfContents";
+import MobileTOC from "@/components/MobileTOC";
+import ProgressBar from "@/components/ProgressBar";
+import BackToTop from "@/components/BackToTop";
+import NextArticle from "@/components/NextArticle";
 import { articleSchema, breadcrumbSchema } from "@/lib/schema";
 
 export function generateStaticParams() {
@@ -79,6 +84,9 @@ export default async function BlogPost({
         ])}
       />
 
+      {/* Reading progress bar */}
+      <ProgressBar />
+
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-16">
         {/* Breadcrumbs */}
         <nav
@@ -146,24 +154,29 @@ export default async function BlogPost({
             {article.title}
           </h1>
 
-          <div className="flex items-center gap-4">
-            <div className="relative w-10 h-10 rounded-full overflow-hidden ring-2 ring-[var(--border)]">
-              <Image
-                src={article.author.avatar}
-                alt={article.author.name}
-                fill
-                className="object-cover"
-              />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="relative w-10 h-10 rounded-full overflow-hidden ring-2 ring-[var(--border)]">
+                <Image
+                  src={article.author.avatar}
+                  alt={article.author.name}
+                  fill
+                  className="object-cover"
+                />
+              </div>
+              <div>
+                <p className="text-sm font-medium">{article.author.name}</p>
+                <p className="text-sm text-[var(--muted-foreground)]">
+                  {article.author.role} ·{" "}
+                  <time dateTime={new Date(article.date).toISOString()}>
+                    {article.date}
+                  </time>
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium">{article.author.name}</p>
-              <p className="text-sm text-[var(--muted-foreground)]">
-                {article.author.role} ·{" "}
-                <time dateTime={new Date(article.date).toISOString()}>
-                  {article.date}
-                </time>
-              </p>
-            </div>
+
+            {/* Share buttons at top */}
+            <ShareTop title={article.title} slug={article.slug} />
           </div>
         </header>
 
@@ -178,22 +191,31 @@ export default async function BlogPost({
           />
         </div>
 
+        {/* Mobile TOC (below lg breakpoint) */}
+        <MobileTOC />
+
         {/* Content + TOC sidebar */}
         <div className="flex gap-10 lg:gap-16">
           {/* Main content column */}
           <div className="min-w-0 flex-1">
-            <article className="prose prose-lg dark:prose-invert max-w-none mb-16">
+            <article className="prose prose-lg dark:prose-invert max-w-none mb-10">
               <MDXContent />
             </article>
 
-            {/* Share */}
+            {/* Bottom share */}
             <ShareSection title={article.title} slug={article.slug} />
+
+            {/* Next article */}
+            <NextArticle slug={article.slug} />
           </div>
 
-          {/* TOC sidebar */}
+          {/* Desktop TOC sidebar */}
           <TableOfContents />
         </div>
       </div>
+
+      {/* Back to top */}
+      <BackToTop />
     </>
   );
 }

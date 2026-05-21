@@ -31,6 +31,17 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
   ];
 
+  // Category pages
+  const categorySlugs = Array.from(
+    new Set(articles.map((a) => a.category.toLowerCase().replace(/\s+/g, "-")))
+  );
+  const categoryRoutes: MetadataRoute.Sitemap = categorySlugs.map((slug) => ({
+    url: `${BASE_URL}/blog/category/${slug}`,
+    lastModified: new Date(),
+    changeFrequency: "weekly" as const,
+    priority: 0.6,
+  }));
+
   const blogRoutes: MetadataRoute.Sitemap = articles.map((article) => ({
     url: `${BASE_URL}/blog/${article.slug}`,
     lastModified: new Date(article.date),
@@ -38,5 +49,5 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.7,
   }));
 
-  return [...staticRoutes, ...blogRoutes];
+return [...staticRoutes, ...categoryRoutes, ...blogRoutes];
 }
