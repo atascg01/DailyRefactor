@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { getArticleBySlug, articles } from "@/content/articles";
 import ShareSection from "@/components/ShareSection";
 import JsonLd from "@/components/JsonLd";
+import TableOfContents from "@/components/TableOfContents";
 import { articleSchema, breadcrumbSchema } from "@/lib/schema";
 
 export function generateStaticParams() {
@@ -78,7 +79,7 @@ export default async function BlogPost({
         ])}
       />
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-16">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-16">
         {/* Breadcrumbs */}
         <nav
           aria-label="Breadcrumb"
@@ -177,13 +178,21 @@ export default async function BlogPost({
           />
         </div>
 
-        {/* Article Content */}
-        <article className="prose prose-lg dark:prose-invert max-w-none mb-16">
-          <MDXContent />
-        </article>
+        {/* Content + TOC sidebar */}
+        <div className="flex gap-10 xl:gap-16">
+          {/* Main content column */}
+          <div className="min-w-0 flex-1">
+            <article className="prose prose-lg dark:prose-invert max-w-none mb-16">
+              <MDXContent />
+            </article>
 
-        {/* Share */}
-        <ShareSection title={article.title} slug={article.slug} />
+            {/* Share */}
+            <ShareSection title={article.title} slug={article.slug} />
+          </div>
+
+          {/* TOC sidebar */}
+          <TableOfContents />
+        </div>
       </div>
     </>
   );
