@@ -1,5 +1,29 @@
+import { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
+
+export const metadata: Metadata = {
+  title: "About",
+  description:
+    "Andrés Tascón — Senior Software Engineer at Oracle, working on Java Management Service. Based in León, Spain.",
+  alternates: {
+    canonical: "https://dailyrefactor.dev/about",
+  },
+  openGraph: {
+    title: "About | DailyRefactor",
+    description:
+      "Andrés Tascón — Senior Software Engineer at Oracle. Learn more about the person behind DailyRefactor.",
+    url: "https://dailyrefactor.dev/about",
+    type: "profile",
+  },
+  twitter: {
+    card: "summary",
+    creator: "@atascg",
+    title: "About | DailyRefactor",
+    description:
+      "Andrés Tascón — Senior Software Engineer at Oracle. Learn more about the person behind DailyRefactor.",
+  },
+};
 
 export default function About() {
   return (

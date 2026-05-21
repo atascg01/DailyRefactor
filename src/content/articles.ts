@@ -16,6 +16,23 @@ export interface ArticleMeta {
 
 export const articles: ArticleMeta[] = [
   {
+    id: 10,
+    slug: "thread-safety-java",
+    title: "Thread Safety in Java: Race Conditions, Shared State, and How to Fix Them",
+    excerpt:
+      "Understand thread safety from first principles — race conditions, shared mutable state, and five practical fixes from `volatile` to database locking. Complete fintech wallet example included.",
+    category: "Java",
+    image:
+      "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=1000&q=80",
+    date: "April 9, 2026",
+    readTime: "16 min read",
+    author: {
+      name: "Andres Tascon",
+      avatar: "/images/pic_photo.jpg",
+      role: "Senior Software Engineer @ Oracle",
+    },
+  },
+  {
     id: 9,
     slug: "domain-driven-design",
     title: "Domain-Driven Design: Models That Actually Mean Something",

@@ -11,6 +11,71 @@ export interface QuizData {
 }
 
 const quizData: Record<string, QuizData> = {
+  "thread-safety-java": {
+    title: "Test Your Understanding",
+    questions: [
+      {
+        question: "What is a race condition?",
+        options: [
+          "When two threads try to start at exactly the same time",
+          "When program correctness depends on the timing or interleaving of thread execution",
+          "When one thread runs faster than another thread",
+          "When the JVM garbage collector pauses all application threads",
+        ],
+        correctIndex: 1,
+        explanation:
+          "A race condition occurs when the correctness of your program depends on the specific timing or ordering of thread execution. You get the correct result for some thread interleavings but incorrect results for others — and you have no control over which interleaving happens at runtime. The classic example is two threads incrementing a shared counter: both read the same value, both increment, both write back, and one increment is lost.",
+      },
+      {
+        question: "What does the `volatile` keyword guarantee in Java?",
+        options: [
+          "Atomicity of all operations on the variable",
+          "Visibility — writes to the variable are immediately visible to all threads",
+          "Exclusive access — only one thread can access the variable at a time",
+          "That the variable is stored in a CPU register for faster access",
+        ],
+        correctIndex: 1,
+        explanation:
+          "`volatile` guarantees visibility: a write to a volatile variable is immediately flushed to main memory and visible to all other threads. It does NOT guarantee atomicity. A compound operation like `counter++` is still unsafe with `volatile` because the read-increment-write sequence can be interleaved. `volatile` is appropriate for simple flags where one thread writes and others read (like a shutdown signal), but not for read-modify-write operations.",
+      },
+      {
+        question: "Why is `counter++` not thread-safe in Java?",
+        options: [
+          "Because the `++` operator is deprecated for multi-threaded use",
+          "Because it's a compound operation: read, increment, write — and another thread can interleave between these steps",
+          "Because Java doesn't support integer arithmetic across threads",
+          "Because the increment value depends on the platform's CPU architecture",
+        ],
+        correctIndex: 1,
+        explanation:
+          "`counter++` compiles into multiple bytecode instructions: read the current value, increment it, write the new value. Between 'read' and 'write', another thread can read the same old value. Both threads then write their incremented result, and one increment is effectively lost. This is a classic lost-update race condition. To make it safe, use `AtomicInteger.incrementAndGet()` or wrap the operation in a `synchronized` block.",
+      },
+      {
+        question: "Is `ConcurrentHashMap` alone enough to make business logic thread-safe?",
+        options: [
+          "Yes, because all ConcurrentHashMap methods are synchronized",
+          "Yes, as long as you use `computeIfAbsent` for all operations",
+          "No — it protects the map's internal state, but compound operations on the values stored in the map still need their own synchronization",
+          "No, because ConcurrentHashMap is deprecated in Java 21+",
+        ],
+        correctIndex: 2,
+        explanation:
+          "`ConcurrentHashMap` guarantees that the map's internal data structures are never corrupted — no lost entries, no infinite loops during iteration, no `NullPointerException` from concurrent structural modifications. But it doesn't make operations on the *values* stored in the map atomic. If two threads get the same value from the map and independently modify it, they can still produce incorrect results. You need additional synchronization (like `synchronized` on the value object or atomic fields within it) at the business-logic level.",
+      },
+      {
+        question: "In a distributed backend with multiple JVM instances hitting the same PostgreSQL database, why is `synchronized` in Java not enough to protect a wallet balance?",
+        options: [
+          "Because PostgreSQL doesn't support the Java `synchronized` keyword",
+          "Because `synchronized` only protects in-process concurrency — it doesn't prevent two different JVM instances from reading and updating the same database row",
+          "Because Java thread synchronization has a maximum timeout of 5 seconds",
+          "Because the database connection pool bypasses Java's synchronization mechanisms",
+        ],
+        correctIndex: 1,
+        explanation:
+          "`synchronized` protects concurrent access within a single JVM process. When you have multiple application instances behind a load balancer, each has its own JVM with its own locks. Two requests routed to different instances can both read the same wallet balance from the database before either writes back. To protect against this, you need database-level concurrency control: pessimistic locking (`SELECT ... FOR UPDATE`) or optimistic locking (a version column that detects conflicts at write time).",
+      },
+    ],
+  },
   "hashcode-equals-java": {
     title: "Test Your Understanding",
     questions: [

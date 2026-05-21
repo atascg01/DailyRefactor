@@ -16,8 +16,28 @@ export default function Home() {
     <>
       <Hero />
 
+      {/* Featured Articles */}
+      <section className="py-16 md:py-24">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-end justify-between mb-10">
+            <div>
+              <h2 className="text-3xl font-bold tracking-tight">Featured Articles</h2>
+              <p className="mt-2 text-[var(--muted-foreground)]">
+                Deep dives into software engineering, tools, and best practices
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {featuredArticles.map((article) => (
+              <ArticleCard key={article.id} {...article} />
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Interview Prep Quiz CTA */}
-      <section className="border-b border-[var(--border)]">
+      <section className="border-t border-b border-[var(--border)]">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <Link
             href="/quiz"
@@ -43,26 +63,6 @@ export default function Home() {
               </span>
             </div>
           </Link>
-        </div>
-      </section>
-
-      {/* Featured Articles */}
-      <section className="py-16 md:py-24">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-end justify-between mb-10">
-            <div>
-              <h2 className="text-3xl font-bold tracking-tight">Featured Articles</h2>
-              <p className="mt-2 text-[var(--muted-foreground)]">
-                Deep dives into software engineering, tools, and best practices
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {featuredArticles.map((article) => (
-              <ArticleCard key={article.id} {...article} />
-            ))}
-          </div>
         </div>
       </section>
 
