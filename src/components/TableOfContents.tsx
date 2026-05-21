@@ -78,7 +78,7 @@ export default function TableOfContents() {
   return (
     <nav
       aria-label="Table of Contents"
-      className="hidden xl:block sticky top-24 w-56 flex-shrink-0 self-start max-h-[calc(100vh-8rem)] overflow-y-auto"
+      className="hidden lg:block sticky top-24 w-48 flex-shrink-0 self-start max-h-[calc(100vh-8rem)] overflow-y-auto"
     >
       <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--muted-foreground)] mb-3">
         On this page

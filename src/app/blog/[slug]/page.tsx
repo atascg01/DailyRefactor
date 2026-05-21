@@ -179,7 +179,7 @@ export default async function BlogPost({
         </div>
 
         {/* Content + TOC sidebar */}
-        <div className="flex gap-10 xl:gap-16">
+        <div className="flex gap-10 lg:gap-16">
           {/* Main content column */}
           <div className="min-w-0 flex-1">
             <article className="prose prose-lg dark:prose-invert max-w-none mb-16">
