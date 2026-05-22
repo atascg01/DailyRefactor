@@ -1,0 +1,1054 @@
+import Quiz from "@/components/Quiz";
+
+<p>You've written a money transfer service. The code compiles, the PR is up, and you're confident it works. Then a colleague asks: "What happens if the database goes down between the debit and the credit?" Or: "What if two requests hit the same wallet at the exact same time?" If your answer starts with "well, probably..." instead of "here's the test that proves it," you've got a testing strategy problem.</p>
+
+<p>Writing unit tests is easy. Designing a testing strategy that gives you real confidence — one that catches concurrency bugs, transaction failures, contract breaks, and edge cases before they hit production — that's a different skill entirely. It's also exactly the kind of thing that comes up in senior engineering interviews.</p>
+
+<p>This article is a practical guide to testing Java backends, from unit tests with JUnit and Mockito all the way through integration tests with Testcontainers, contract tests for microservices, and concurrency tests that actually catch race conditions. We'll use a fintech wallet as our running example — because if you can test a money transfer, you can test anything.</p>
+
+## Table of Contents
+
+- [1. What Is a Testing Strategy?](#1-what-is-a-testing-strategy)
+- [2. The Testing Pyramid](#2-the-testing-pyramid)
+- [3. Unit Tests](#3-unit-tests)
+- [4. What Should You Mock?](#4-what-should-you-mock)
+- [5. Testing With Dependency Injection](#5-testing-with-dependency-injection)
+- [6. Integration Tests](#6-integration-tests)
+- [7. Testing Transactions and Database Behavior](#7-testing-transactions-and-database-behavior)
+- [8. Testing Concurrency](#8-testing-concurrency)
+- [9. Contract Tests](#9-contract-tests)
+- [10. API Tests](#10-api-tests)
+- [11. End-to-End Tests](#11-end-to-end-tests)
+- [12. Testing Error Handling](#12-testing-error-handling)
+- [13. Testing and Product Ownership](#13-testing-and-product-ownership)
+- [14. Common Mistakes](#14-common-mistakes)
+- [15. Interview Questions](#15-interview-questions)
+- [16. Conclusion](#16-conclusion)
+
+## 1. What Is a Testing Strategy?
+
+A testing strategy is a set of intentional decisions about what to test, at which level, with which tools, and — crucially — what *not* to test at a given level. It's not a list of test files. It's the answer to: "If I change this code, how do I know I haven't broken anything?"
+
+Different tests answer different questions:
+
+- **Unit tests** ask: *Does this class behave correctly in isolation?*
+- **Integration tests** ask: *Does this code actually work with real infrastructure?*
+- **Contract tests** ask: *Do consumer and provider agree on the API shape?*
+- **End-to-end tests** ask: *Does the whole system do what the user expects?*
+
+The mistake most teams make is trying to answer all these questions at the same level — usually unit tests, with a thick layer of mocking that masks real integration problems. Or they go the other direction and write E2E tests for every edge case, ending up with a test suite that takes 45 minutes and fails for unrelated reasons half the time.
+
+A good strategy distributes confidence across levels. Unit tests catch logic errors fast. Integration tests prove the database queries work. Contract tests prevent teams from accidentally breaking each other. E2E tests verify that the most critical user journeys survive everything else.
+
+### Why "We Write Unit Tests" Isn't Enough
+
+Consider a wallet debit flow:
+
+```java
+public void debit(WalletId walletId, Money amount) {
+    var wallet = walletRepository.findById(walletId);
+    wallet.debit(amount);
+    walletRepository.save(wallet);
+}
+```
+
+You can unit-test `Wallet.debit()` all day — checking insufficient funds, currency mismatches, zero amounts. But none of those tests answer: does the SQL query actually lock the row? Does the transaction roll back if the save fails? Does the optimistic locking version check work? Those questions live at a different level of the pyramid, and they require a different kind of test.
+
+## 2. The Testing Pyramid
+
+The testing pyramid is a mental model, not a law of physics. It says:
+
+- **Lots of unit tests** — fast, focused, cheap to write and run.
+- **Fewer integration tests** — slower, more confidence, but more setup.
+- **Even fewer end-to-end tests** — closest to reality, but slow, flaky, and expensive.
+
+```
+        ╱  E2E  ╲
+       ╱──────────╲
+      ╱ Integration ╲
+     ╱────────────────╲
+    ╱   Unit Tests     ╲
+   ╱──────────────────────╲
+```
+
+The tradeoff is always speed vs. confidence. A unit test runs in milliseconds and tells you the logic is correct. An integration test takes seconds but proves the logic works with a real database. An E2E test takes minutes but exercises the system exactly as a user would.
+
+The pyramid should be a guideline, not a straitjacket. If your system is a thin API over a database with complex queries, you probably need more integration tests and fewer unit tests than the pyramid suggests. If you have a rich domain model with complex business rules, unit tests pull more weight. The point is to be *intentional* about the balance.
+
+## 3. Unit Tests
+
+A unit test verifies the behavior of a single class or method in isolation. Dependencies are replaced with test doubles so you're testing the logic, not the infrastructure.
+
+Unit tests should be:
+
+- **Fast** — hundreds per second, no network, no disk I/O.
+- **Deterministic** — same result every run, no flakiness.
+- **Readable** — a developer should understand the expected behavior from the test name and assertions alone.
+
+### A Wallet Domain Example
+
+Let's model a simple wallet that supports debit operations:
+
+```java
+public record Money(BigDecimal amount, Currency currency) {
+    public Money {
+        Objects.requireNonNull(amount);
+        Objects.requireNonNull(currency);
+        if (amount.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Amount must not be negative");
+        }
+    }
+
+    public Money add(Money other) {
+        assertSameCurrency(other);
+        return new Money(amount.add(other.amount), currency);
+    }
+
+    public Money subtract(Money other) {
+        assertSameCurrency(other);
+        return new Money(amount.subtract(other.amount), currency);
+    }
+
+    private void assertSameCurrency(Money other) {
+        if (!currency.equals(other.currency)) {
+            throw new IllegalArgumentException(
+                "Currency mismatch: " + currency + " vs " + other.currency);
+        }
+    }
+}
+```
+
+```java
+public class Wallet {
+    private final WalletId id;
+    private Money balance;
+
+    public void debit(Money amount) {
+        if (balance.subtract(amount).amount().compareTo(BigDecimal.ZERO) < 0) {
+            throw new InsufficientFundsException(id, amount, balance);
+        }
+        this.balance = balance.subtract(amount);
+    }
+}
+```
+
+Now the unit tests:
+
+```java
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.*;
+
+class WalletTest {
+
+    private static final Money HUNDRED_EUR = new Money(
+        new BigDecimal("100.00"), Currency.getInstance("EUR"));
+    private static final Money FIFTY_EUR = new Money(
+        new BigDecimal("50.00"), Currency.getInstance("EUR"));
+    private static final Money FIFTY_USD = new Money(
+        new BigDecimal("50.00"), Currency.getInstance("USD"));
+
+    @Test
+    void shouldDebitSuccessfullyWhenBalanceIsSufficient() {
+        var wallet = new Wallet(new WalletId("w-1"), HUNDRED_EUR);
+
+        wallet.debit(FIFTY_EUR);
+
+        assertEquals(new Money(new BigDecimal("50.00"), Currency.getInstance("EUR")),
+                     wallet.balance());
+    }
+
+    @Test
+    void shouldThrowWhenInsufficientFunds() {
+        var wallet = new Wallet(new WalletId("w-1"), FIFTY_EUR);
+
+        assertThrows(InsufficientFundsException.class,
+                     () -> wallet.debit(HUNDRED_EUR));
+    }
+
+    @Test
+    void shouldThrowWhenCurrencyMismatch() {
+        var wallet = new Wallet(new WalletId("w-1"), HUNDRED_EUR);
+
+        assertThrows(IllegalArgumentException.class,
+                     () -> wallet.debit(FIFTY_USD));
+    }
+
+    @Test
+    void shouldDebitExactBalanceToZero() {
+        var wallet = new Wallet(new WalletId("w-1"), FIFTY_EUR);
+
+        wallet.debit(FIFTY_EUR);
+
+        assertEquals(Money.zero(Currency.getInstance("EUR")), wallet.balance());
+    }
+}
+```
+
+These tests are pure domain logic — no database, no HTTP, no Spring context. They run in under a millisecond and tell you exactly what the `Wallet` class promises. Domain logic, value objects, and pure functions are the best candidates for unit tests because they have clear inputs, clear outputs, and no side effects.
+
+### What Makes a Good Unit Test?
+
+A good unit test has three clear phases, often called **Arrange, Act, Assert**:
+
+```java
+@Test
+void shouldDebitSuccessfullyWhenBalanceIsSufficient() {
+    // Arrange — set up the world
+    var wallet = new Wallet(new WalletId("w-1"), HUNDRED_EUR);
+
+    // Act — do the thing
+    wallet.debit(FIFTY_EUR);
+
+    // Assert — verify the outcome
+    assertEquals(expectedBalance, wallet.balance());
+}
+```
+
+Name your tests for the behavior, not the method. `testDebit` tells you nothing. `shouldThrowWhenInsufficientFunds` tells you what to expect and under what conditions.
+
+Test one thing per test. If a test has five assertions on unrelated concerns, it's doing too much — and when it fails, you'll spend time figuring out which of the five things broke.
+
+## 4. What Should You Mock?
+
+Mocking is powerful but easy to misuse. The rule of thumb: mock at architectural boundaries, not internal ones.
+
+### Good Candidates for Mocking
+
+These are things you should almost always replace in unit tests:
+
+- **Email senders** — you don't want tests sending real emails.
+- **Payment gateways** — external HTTP calls with real money involved.
+- **HTTP clients** — any outbound network call makes tests slow and flaky.
+- **Message publishers** — Kafka, RabbitMQ, SQS — production infrastructure.
+- **Time/Clock** — any logic that depends on "now" should use an injectable `Clock` so tests can freeze time.
+
+```java
+// Inject a Clock instead of calling Instant.now() directly
+public class PaymentService {
+    private final Clock clock;
+
+    public PaymentService(Clock clock) {
+        this.clock = clock;
+    }
+
+    public boolean isPaymentExpired(Payment payment) {
+        return Instant.now(clock)
+            .isAfter(payment.createdAt().plus(Duration.ofMinutes(30)));
+    }
+}
+
+// In test: freeze time to a known instant
+@Test
+void shouldMarkPaymentAsExpiredAfter30Minutes() {
+    var fixedClock = Clock.fixed(
+        Instant.parse("2026-05-22T10:30:00Z"), ZoneOffset.UTC);
+    var service = new PaymentService(fixedClock);
+    var payment = new Payment(/* createdAt = 2026-05-22T10:00:00Z */);
+
+    assertTrue(service.isPaymentExpired(payment));
+}
+```
+
+### Things to Be Careful Mocking
+
+These often cause more harm than good when mocked:
+
+- **The class under test** — never mock what you're actually testing. Sounds obvious, but partial mocks (spies) on the test subject are a red flag.
+- **Value objects** — `Money`, `Email`, `Address`, `WalletId`. These are data; instantiate them directly.
+- **Simple domain logic** — if the logic is pure computation, test it with real inputs and outputs, no mocking needed.
+- **Too many internal collaborators** — if your test needs five mocks to set up, your class might be doing too much. Consider splitting it.
+
+### The Cost of Over-Mocking
+
+Over-mocked tests look impressive in coverage reports but provide false confidence. They test that your mocks behave exactly as you configured them to behave — which tells you nothing about whether the real implementations actually work together.
+
+```java
+// This test passes. It also tells you nothing useful.
+@Test
+void overMockedNightmare() {
+    when(repo.findById(any())).thenReturn(Optional.of(wallet));
+    when(fraudChecker.check(any())).thenReturn(FraudResult.APPROVED);
+    when(notifier.send(any())).thenReturn(true);
+    when(ledger.record(any())).thenReturn(new LedgerEntry(...));
+
+    service.transfer(command);
+
+    // All we proved: our mock config doesn't throw NPE.
+    // Real FraudChecker might call an HTTP endpoint that's down.
+    // Real Ledger might have a unique constraint we just violated.
+}
+```
+
+A good heuristic: if your test has more `when(...)` lines than assertions, you might be over-mocking.
+
+## 5. Testing With Dependency Injection
+
+Dependency Injection is one of the most valuable testing tools in Java. Constructor injection in particular makes unit testing trivial — you pass dependencies through the constructor, and tests pass fakes or mocks instead of real infrastructure.
+
+```java
+public class TransferService {
+    private final WalletRepository walletRepository;
+    private final FraudChecker fraudChecker;
+    private final NotificationSender notificationSender;
+
+    public TransferService(
+            WalletRepository walletRepository,
+            FraudChecker fraudChecker,
+            NotificationSender notificationSender) {
+        this.walletRepository = walletRepository;
+        this.fraudChecker = fraudChecker;
+        this.notificationSender = notificationSender;
+    }
+
+    public TransferResult transfer(TransferCommand command) {
+        var sourceWallet = walletRepository.findById(command.sourceId())
+            .orElseThrow(() -> new WalletNotFoundException(command.sourceId()));
+        var targetWallet = walletRepository.findById(command.targetId())
+            .orElseThrow(() -> new WalletNotFoundException(command.targetId()));
+
+        if (fraudChecker.check(command) == FraudResult.REJECTED) {
+            return TransferResult.REJECTED;
+        }
+
+        sourceWallet.debit(command.amount());
+        targetWallet.credit(command.amount());
+
+        walletRepository.save(sourceWallet);
+        walletRepository.save(targetWallet);
+
+        notificationSender.send(new TransferCompleted(command));
+
+        return TransferResult.COMPLETED;
+    }
+}
+```
+
+In a test, you don't need Spring, `@Autowired`, or an application context. You just construct the object:
+
+```java
+@Test
+void shouldCompleteTransferWhenFraudCheckPasses() {
+    var sourceWallet = new Wallet(new WalletId("w-1"), HUNDRED_EUR);
+    var targetWallet = new Wallet(new WalletId("w-2"), Money.zero(Currency.getInstance("EUR")));
+    var walletRepo = new InMemoryWalletRepository();
+    walletRepo.save(sourceWallet);
+    walletRepo.save(targetWallet);
+
+    var fraudChecker = (FraudChecker) cmd -> FraudResult.APPROVED;
+    var notificationSender = mock(NotificationSender.class);
+
+    var service = new TransferService(walletRepo, fraudChecker, notificationSender);
+
+    var result = service.transfer(new TransferCommand(
+        new WalletId("w-1"), new WalletId("w-2"), FIFTY_EUR));
+
+    assertEquals(TransferResult.COMPLETED, result);
+    assertEquals(new Money(new BigDecimal("50.00"), Currency.getInstance("EUR")),
+                 walletRepo.findById(new WalletId("w-1")).get().balance());
+    verify(notificationSender).send(any(TransferCompleted.class));
+}
+```
+
+This test uses an in-memory repository for fast, deterministic setup and a mock for the notification sender (to verify it was called). No Spring, no database, no network — but we've verified the core orchestration logic of the transfer.
+
+### Why Constructor Injection?
+
+Constructor injection has three advantages for testing:
+
+1. **Dependencies are explicit.** You can see from the constructor signature exactly what a class needs.
+2. **Immutability.** Fields can be `final`, which eliminates an entire category of bugs.
+3. **No framework required for tests.** You can `new TransferService(fakeRepo, fakeFraud, fakeNotifier)` in a test with zero framework setup. Field injection requires reflection or a DI container to populate private fields.
+
+## 6. Integration Tests
+
+An integration test verifies that your code works with real infrastructure — a real database, a real message broker, a real filesystem. It answers the question: "Does my SQL query actually return what I think it returns?"
+
+The simplest and most reliable way to run integration tests in Java is with **Testcontainers**. It spins up real PostgreSQL (or MySQL, Kafka, Redis, whatever) in a Docker container for the duration of your tests.
+
+```java
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+
+@Testcontainers
+class WalletRepositoryIntegrationTest {
+
+    @Container
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16")
+        .withDatabaseName("wallet_test")
+        .withUsername("test")
+        .withPassword("test");
+
+    static WalletRepository repository;
+
+    @BeforeAll
+    static void setUp() {
+        var dataSource = new HikariDataSource();
+        dataSource.setJdbcUrl(postgres.getJdbcUrl());
+        dataSource.setUsername(postgres.getUsername());
+        dataSource.setPassword(postgres.getPassword());
+
+        repository = new PostgresWalletRepository(dataSource);
+        // Run migrations or schema init here
+    }
+
+    @Test
+    void shouldPersistAndRetrieveWallet() {
+        var wallet = new Wallet(new WalletId("w-1"), HUNDRED_EUR);
+        repository.save(wallet);
+
+        var found = repository.findById(new WalletId("w-1"));
+
+        assertTrue(found.isPresent());
+        assertEquals(HUNDRED_EUR, found.get().balance());
+    }
+
+    @Test
+    void shouldReturnEmptyForUnknownWallet() {
+        var found = repository.findById(new WalletId("nonexistent"));
+
+        assertTrue(found.isEmpty());
+    }
+}
+```
+
+Unlike unit tests with mocked repositories, this test proves that the SQL works, the column types match your Java types, the schema migrations ran correctly, and PostgreSQL's actual query planner returns the right rows.
+
+### What Integration Tests Are Good For
+
+Integration tests excel at verifying things unit tests structurally cannot:
+
+- **SQL queries** — joins, aggregations, window functions, CTEs. No mock can tell you if `LEFT JOIN` returns what you expect.
+- **Migrations** — does your Flyway/Liquibase migration actually create the right schema?
+- **Repository behavior** — optimistic locking, `@Version` fields, cascade operations.
+- **Transaction boundaries** — does the rollback actually undo all changes?
+- **Serialization/deserialization** — does Jackson produce the JSON shape you expect from a real entity graph?
+- **Framework configuration** — does the query timeout you set in `application.properties` actually take effect?
+
+Integration tests are slower than unit tests. A typical integration test takes 1-5 seconds (mostly container startup, which Testcontainers reuses across test classes). That's fine for a CI pipeline, but it means you should be selective about what you put at this level.
+
+## 7. Testing Transactions and Database Behavior
+
+Transactions are where many backend bugs hide. The code works perfectly in development; it only breaks when two things happen at the same time, or when one thing fails halfway through.
+
+ACID properties (Atomicity, Consistency, Isolation, Durability) are guarantees databases provide — but only if your code uses them correctly. Tests should verify that your code actually delivers on those guarantees.
+
+### Testing Atomicity: Rollback on Failure
+
+Consider a transfer that debits one wallet and credits another. If the credit fails, the debit must be rolled back:
+
+```java
+@Transactional
+public void transfer(TransferCommand command) {
+    var source = walletRepository.findByIdWithLock(command.sourceId());
+    var target = walletRepository.findByIdWithLock(command.targetId());
+
+    source.debit(command.amount());
+    walletRepository.save(source);
+
+    // Simulate failure — perhaps a ledger write fails
+    if (someCondition) {
+        throw new LedgerWriteException("Failed to record ledger entry");
+    }
+
+    target.credit(command.amount());
+    walletRepository.save(target);
+}
+```
+
+The integration test:
+
+```java
+@Test
+void shouldRollbackDebitWhenCreditFails() {
+    var source = walletRepository.save(
+        new Wallet(new WalletId("w-1"), HUNDRED_EUR));
+    var target = walletRepository.save(
+        new Wallet(new WalletId("w-2"), Money.zero(Currency.getInstance("EUR"))));
+
+    // Force a failure during the transfer
+    assertThrows(LedgerWriteException.class, () -> {
+        transferService.transfer(
+            new TransferCommand(source.id(), target.id(), FIFTY_EUR));
+    });
+
+    // Verify neither wallet changed — full rollback
+    var sourceAfter = walletRepository.findById(source.id()).get();
+    var targetAfter = walletRepository.findById(target.id()).get();
+
+    assertEquals(HUNDRED_EUR, sourceAfter.balance(),
+        "Source wallet should not have been debited");
+    assertEquals(Money.zero(Currency.getInstance("EUR")), targetAfter.balance(),
+        "Target wallet should not have been credited");
+}
+```
+
+### Testing Optimistic Locking
+
+Optimistic locking uses a version column to detect concurrent modifications:
+
+```java
+@Test
+void shouldDetectConcurrentModification() {
+    var wallet = walletRepository.save(
+        new Wallet(new WalletId("w-1"), HUNDRED_EUR));
+
+    // Simulate two concurrent reads
+    var copy1 = walletRepository.findById(wallet.id()).get();
+    var copy2 = walletRepository.findById(wallet.id()).get();
+
+    // First write succeeds
+    copy1.debit(FIFTY_EUR);
+    walletRepository.save(copy1);
+
+    // Second write should fail — version mismatch
+    copy2.debit(FIFTY_EUR);
+    assertThrows(OptimisticLockException.class,
+                 () -> walletRepository.save(copy2));
+}
+```
+
+### Testing Idempotency
+
+In distributed systems, network retries can cause duplicate requests. Idempotency keys ensure processing once and only once:
+
+```java
+@Test
+void shouldNotProcessDuplicateTransfer() {
+    var idempotencyKey = UUID.randomUUID().toString();
+    var command = new TransferCommand(w1, w2, FIFTY_EUR);
+
+    // First request succeeds
+    var result1 = transferService.transfer(command, idempotencyKey);
+    assertEquals(TransferResult.COMPLETED, result1);
+
+    // Duplicate request returns the same result without double-processing
+    var result2 = transferService.transfer(command, idempotencyKey);
+    assertEquals(TransferResult.COMPLETED, result2);
+
+    var sourceAfter = walletRepository.findById(w1).get();
+    assertEquals(new Money(new BigDecimal("50.00"), Currency.getInstance("EUR")),
+                 sourceAfter.balance(),
+                 "Wallet should have been debited only once");
+}
+```
+
+## 8. Testing Concurrency
+
+Concurrency bugs are the hardest to reproduce, the hardest to debug, and among the most dangerous in financial systems. A wallet with 100 EUR should never allow two simultaneous debits of 80 EUR to both succeed — that would create money out of thin air.
+
+```java
+@Test
+void shouldPreventOverspendingUnderConcurrentDebits() throws Exception {
+    var walletId = walletRepository.save(
+        new Wallet(new WalletId("w-1"), HUNDRED_EUR)).id();
+
+    int threadCount = 2;
+    var executor = Executors.newFixedThreadPool(threadCount);
+    var latch = new CountDownLatch(1);
+    var successes = new AtomicInteger(0);
+    var failures = new AtomicInteger(0);
+
+    var tasks = IntStream.range(0, threadCount).mapToObj(i ->
+        (Callable<Void>) () -> {
+            latch.await(); // all threads start simultaneously
+            try {
+                transferService.debit(walletId, new Money(
+                    new BigDecimal("80.00"), Currency.getInstance("EUR")));
+                successes.incrementAndGet();
+            } catch (InsufficientFundsException e) {
+                failures.incrementAndGet();
+            }
+            return null;
+        }).toList();
+
+    latch.countDown(); // release all threads
+    executor.invokeAll(tasks);
+    executor.shutdown();
+    executor.awaitTermination(5, TimeUnit.SECONDS);
+
+    assertEquals(1, successes.get(),
+        "Exactly one debit should succeed");
+    assertEquals(1, failures.get(),
+        "Exactly one debit should fail with insufficient funds");
+
+    var wallet = walletRepository.findById(walletId).get();
+    assertEquals(new Money(new BigDecimal("20.00"), Currency.getInstance("EUR")),
+                 wallet.balance(),
+                 "Final balance should be 100 - 80 = 20");
+}
+```
+
+A few things to note about this test:
+
+- **`CountDownLatch`** ensures both threads hit the debit call at roughly the same time, maximizing the chance of a race.
+- **`AtomicInteger`** tracks results from multiple threads safely.
+- The assertions are precise: exactly one success, one failure, and the final balance matches.
+
+### A Word of Caution
+
+Concurrency tests can be flaky. If the thread scheduler happens to serialize the two requests (one completes fully before the other starts), this test passes even without proper locking. That's a *false positive* — the test says "OK" but the code has a race condition.
+
+To mitigate this:
+
+- **Run concurrency tests multiple times** in CI (some frameworks repeat them 100x).
+- **Use timeouts in the concurrent code paths** to increase contention windows.
+- **Pair concurrency unit tests with deterministic integration tests** that verify locking at the database level:
+
+```java
+@Test
+void pessimisticLockShouldPreventConcurrentDebit() {
+    var wallet = walletRepository.save(
+        new Wallet(new WalletId("w-1"), HUNDRED_EUR));
+
+    // Thread 1 acquires lock
+    walletRepository.findByIdWithLock(wallet.id());
+
+    // Thread 2 tries to acquire the same lock — should time out or block
+    assertTimeoutPreemptively(Duration.ofSeconds(2), () -> {
+        walletRepository.findByIdWithLock(wallet.id());
+    });
+}
+```
+
+## 9. Contract Tests
+
+Contract tests verify that the interface between two systems — whether it's a REST API, a gRPC service, or a message schema — matches what both sides expect. They don't test behavior or internal logic. They test *compatibility*.
+
+### REST API Contracts
+
+If you expose a REST API, OpenAPI (formerly Swagger) defines the contract. Contract tests verify that your implementation matches the spec:
+
+```java
+@Test
+void shouldMatchOpenApiSpec() {
+    var request = get("/api/wallets/{walletId}", "w-1");
+    var response = mockMvc.perform(request)
+        .andExpect(status().isOk())
+        .andReturn().getResponse();
+
+    // Verify the response matches the OpenAPI schema
+    var schemaValidator = new OpenApiSchemaValidator("openapi.yaml");
+    assertTrue(schemaValidator.validate(response.getContentAsString(),
+                                        "/components/schemas/WalletResponse"));
+}
+```
+
+Tools like Spring REST Docs, Pact, and wiremock-spring-boot can generate and verify contracts automatically.
+
+### Pact: Consumer-Driven Contracts
+
+[Pact](https://pact.io) is a contract testing framework where the *consumer* defines what it expects, and the *provider* verifies it satisfies those expectations:
+
+```java
+// Consumer side: define what we expect from the Wallet Service
+@Pact(consumer = "PaymentService")
+public V4Pact walletBalancePact(PactDslWithProvider builder) {
+    return builder
+        .given("wallet w-1 exists with balance 100 EUR")
+        .uponReceiving("a request for wallet balance")
+            .path("/api/wallets/w-1")
+            .method("GET")
+        .willRespondWith()
+            .status(200)
+            .headers(Map.of("Content-Type", "application/json"))
+            .body(newJsonBody(body -> {
+                body.stringType("id", "w-1");
+                body.object("balance", balance -> {
+                    balance.numberType("amount", 100.00);
+                    balance.stringType("currency", "EUR");
+                });
+            }).build())
+        .toPact();
+}
+```
+
+The provider then runs the pact verification to confirm it actually responds with that shape.
+
+### Event Contracts
+
+If your services communicate via events (Kafka, RabbitMQ), the event schema is your contract:
+
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PaymentCaptured",
+  "type": "object",
+  "properties": {
+    "paymentId": { "type": "string" },
+    "amount": {
+      "type": "object",
+      "properties": {
+        "amount": { "type": "number" },
+        "currency": { "type": "string" }
+      },
+      "required": ["amount", "currency"]
+    },
+    "capturedAt": { "type": "string", "format": "date-time" }
+  },
+  "required": ["paymentId", "amount", "capturedAt"]
+}
+```
+
+A test that serializes a `PaymentCaptured` event and validates it against the schema prevents accidental breaking changes — like renaming `capturedAt` to `timestamp` without updating downstream consumers.
+
+### Why Contract Tests Matter
+
+In a monolith, you refactor and the compiler tells you what broke. In a microservices architecture, two teams can independently change their services, and nothing breaks until production. Contract tests fill that gap. They're cheap to run, don't require full environments, and catch the "I didn't know anyone was using that field" category of bugs before deploy.
+
+## 10. API Tests
+
+API tests exercise your controllers and verify the HTTP layer: routing, validation, serialization, error responses, and auth. They're lighter than full E2E tests (no browser, no external services beyond maybe the database) but heavier than unit tests (they go through the Spring MVC layer).
+
+```java
+@WebMvcTest(WalletController.class)
+class WalletControllerTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @MockBean
+    private WalletService walletService;
+
+    @Test
+    void shouldReturnWalletWhenFound() throws Exception {
+        when(walletService.getWallet(new WalletId("w-1")))
+            .thenReturn(new WalletResponse("w-1", HUNDRED_EUR));
+
+        mockMvc.perform(get("/api/wallets/w-1")
+                .accept(MediaType.APPLICATION_JSON))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.id").value("w-1"))
+            .andExpect(jsonPath("$.balance.amount").value(100.00))
+            .andExpect(jsonPath("$.balance.currency").value("EUR"));
+    }
+
+    @Test
+    void shouldReturn404WhenWalletNotFound() throws Exception {
+        when(walletService.getWallet(new WalletId("w-999")))
+            .thenThrow(new WalletNotFoundException(new WalletId("w-999")));
+
+        mockMvc.perform(get("/api/wallets/w-999"))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.error").value("WALLET_NOT_FOUND"));
+    }
+
+    @Test
+    void shouldReturn400ForInvalidRequest() throws Exception {
+        mockMvc.perform(post("/api/wallets/w-1/debit")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"amount": -50.00, "currency": "EUR"}
+                    """))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shouldReturn401WhenUnauthenticated() throws Exception {
+        mockMvc.perform(get("/api/wallets/w-1"))
+            .andExpect(status().isUnauthorized());
+    }
+}
+```
+
+API tests should verify the things that matter at the HTTP boundary:
+
+- **Request validation** — does a missing field return 400?
+- **Response status codes** — 200, 201, 400, 401, 403, 404, 409, 500.
+- **Error response shape** — is it consistent across endpoints?
+- **Auth boundaries** — are protected endpoints actually protected?
+- **JSON serialization** — are fields named correctly in the response?
+
+Don't duplicate every unit test here. The API test doesn't need to verify that insufficient funds throws an exception — the unit test covers that. The API test verifies that the exception produces the right HTTP response.
+
+## 11. End-to-End Tests
+
+End-to-end tests verify complete user journeys through the entire system — real HTTP calls, real database, real (or simulated) external services. They're the closest thing to what your users actually experience.
+
+A payment flow E2E test might look like:
+
+```java
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@Testcontainers
+class PaymentFlowE2ETest {
+
+    @Container
+    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:16");
+
+    @Autowired
+    private TestRestTemplate restTemplate;
+
+    @Test
+    void shouldCompleteFullPaymentFlow() {
+        // 1. Create account
+        var account = restTemplate.postForObject("/api/accounts",
+            new CreateAccountRequest("Alice"), AccountResponse.class);
+        assertNotNull(account.id());
+
+        // 2. Fund wallet
+        restTemplate.postForObject("/api/wallets/{id}/credit",
+            new CreditRequest(new Money(new BigDecimal("200.00"), "EUR")),
+            Void.class, account.walletId());
+
+        // 3. Verify balance
+        var wallet = restTemplate.getForObject(
+            "/api/wallets/{id}", WalletResponse.class, account.walletId());
+        assertEquals(new BigDecimal("200.00"), wallet.balance().amount());
+
+        // 4. Initiate payment
+        var payment = restTemplate.postForObject("/api/payments",
+            new PaymentRequest(account.walletId(), "merchant-1",
+                new Money(new BigDecimal("75.00"), "EUR")),
+            PaymentResponse.class);
+        assertEquals(PaymentStatus.COMPLETED, payment.status());
+
+        // 5. Verify ledger entry
+        var ledger = restTemplate.getForObject(
+            "/api/ledger?paymentId={id}", LedgerResponse.class, payment.id());
+        assertEquals(1, ledger.entries().size());
+        assertEquals(new BigDecimal("75.00"), ledger.entries().get(0).amount());
+    }
+}
+```
+
+### Why E2E Tests Are Expensive
+
+E2E tests are slow (30+ seconds each), require full infrastructure, and are susceptible to environmental flakiness — network glitches, container startup races, test data collisions. When an E2E test fails, you often spend more time diagnosing *why* it failed than understanding *what* code broke.
+
+Because of this cost, E2E tests should cover only your most critical user journeys — the flows where failure means lost money, regulatory problems, or severe user impact. For everything else, push coverage down the pyramid to faster, more reliable test levels.
+
+## 12. Testing Error Handling
+
+Production systems fail in creative ways. Happy-path tests give you confidence that the code works under ideal conditions. Error-handling tests give you confidence that it degrades gracefully when conditions are anything but ideal.
+
+Here's a non-exhaustive list of failures you should test:
+
+### Timeouts
+
+```java
+@Test
+void shouldHandlePaymentGatewayTimeout() {
+    when(paymentGateway.capture(any()))
+        .thenAnswer(invocation -> {
+            Thread.sleep(5000); // simulate timeout
+            throw new SocketTimeoutException("Gateway unreachable");
+        });
+
+    var result = paymentService.capture(paymentId);
+
+    assertEquals(PaymentStatus.PENDING_RETRY, result.status());
+    verify(retryScheduler).scheduleRetry(paymentId, Duration.ofMinutes(1));
+}
+```
+
+### External Service Failures
+
+```java
+@Test
+void shouldContinueWhenNotificationFails() {
+    // The transfer should succeed even if the confirmation email fails
+    doThrow(new RuntimeException("SMTP down"))
+        .when(notificationSender).send(any());
+
+    var result = transferService.transfer(validCommand);
+
+    assertEquals(TransferResult.COMPLETED, result);
+    // Transfer went through; notification failure is logged but not fatal
+}
+```
+
+### Retries and Idempotency
+
+```java
+@Test
+void shouldNotChargeCardTwiceOnRetry() {
+    var idempotencyKey = UUID.randomUUID();
+    when(paymentGateway.capture(any()))
+        .thenThrow(new NetworkException("Timeout")) // first attempt fails
+        .thenReturn(new CaptureResult("cap-1"));    // retry succeeds
+
+    paymentService.captureWithRetry(payment, idempotencyKey);
+
+    verify(paymentGateway, times(2)).capture(any());
+    // But the customer was charged only once (idempotency key deduplicates)
+}
+```
+
+### Invalid Input
+
+```java
+@Test
+void shouldRejectNegativeTransferAmount() {
+    var command = new TransferCommand(w1, w2,
+        new Money(new BigDecimal("-50.00"), Currency.getInstance("EUR")));
+
+    assertThrows(ValidationException.class,
+                 () -> transferService.transfer(command));
+}
+```
+
+### Database Constraint Violations
+
+```java
+@Test
+void shouldHandleDuplicateWalletId() {
+    walletRepository.save(new Wallet(new WalletId("w-1"), HUNDRED_EUR));
+
+    assertThrows(DataIntegrityViolationException.class, () -> {
+        walletRepository.save(new Wallet(new WalletId("w-1"), FIFTY_EUR));
+    });
+}
+```
+
+### Partial Failure in Distributed Operations
+
+```java
+@Test
+void shouldRollbackWhenDownstreamServiceFails() {
+    // Transfer debits wallet A, credits wallet B, then records in ledger
+    // If the ledger write fails, the debit+credit should roll back
+    doThrow(new LedgerWriteException("Partition unavailable"))
+        .when(ledgerService).record(any());
+
+    assertThrows(LedgerWriteException.class,
+        () -> transferService.transfer(validCommand));
+
+    // Verify no money moved
+    assertEquals(HUNDRED_EUR, walletRepo.findById(w1).get().balance());
+    assertEquals(Money.zero(Currency.getInstance("EUR")),
+                 walletRepo.findById(w2).get().balance());
+}
+```
+
+The principle: for every external dependency, ask "what happens when this fails?" Then write the test.
+
+## 13. Testing and Product Ownership
+
+Testing isn't just about catching bugs — it's about protecting product behavior. When you write a test for "wallet balance must never go negative," you're encoding a product rule. When that test fails six months later during a refactor, it's not just a code problem; it's a product protection mechanism that just fired.
+
+Good tests protect:
+
+- **Business invariants** — balances can't go negative, payments can't be duplicated, currencies must match.
+- **User expectations** — API contracts stay stable, error messages are clear, auth boundaries are enforced.
+- **Refactoring safety** — you can restructure code with confidence that the product behavior hasn't changed.
+- **Regulatory requirements** — certain financial operations must be atomic, auditable, and idempotent.
+
+### Choosing What to Test Based on Risk
+
+Not every line of code needs the same level of testing. Prioritize based on product risk:
+
+| Risk Level | Example | Testing Strategy |
+|---|---|---|
+| **Critical** | Money transfer, debit, payment capture | Unit + Integration + Concurrency + E2E |
+| **High** | Authentication, authorization, API contracts | Unit + Integration + API tests |
+| **Medium** | Notification sending, report generation | Unit + Integration |
+| **Low** | Internal formatting, logging, utility methods | Unit tests only |
+
+A good engineer doesn't chase 100% code coverage. They ask: "If this breaks, what's the impact?" and test accordingly.
+
+## 14. Common Mistakes
+
+Here are the testing antipatterns I see most often in Java backend codebases:
+
+### 1. Only Testing Happy Paths
+Every method gets a test for "it works" and nothing else. No edge cases, no error conditions, no boundary values. These test suites give a false sense of security — they all pass, but the system fails the moment anything goes wrong.
+
+### 2. Mocking the Database for Repository Logic
+```java
+// This test proves Mockito works. It proves nothing about your SQL.
+when(jdbcTemplate.query(anyString(), any(RowMapper.class), any()))
+    .thenReturn(List.of(wallet));
+```
+If you're testing repository behavior, use a real database. Testcontainers makes this easy. Mocking JDBC or JPA means your test passes even if the SQL is wrong.
+
+### 3. Starting Spring Context for Every Unit Test
+`@SpringBootTest` boots the entire application. It takes seconds. If you're testing pure business logic (like `Wallet.debit()`), you don't need Spring at all. Use `@SpringBootTest` only for integration and E2E tests.
+
+### 4. Too Many Brittle Mocks
+When every test has 15 `when(...)` lines mocking internal collaborators, tests become change detectors. Rename a method? 40 tests break. Refactor a private helper? 20 tests break. The tests should survive implementation changes as long as behavior stays the same.
+
+### 5. No Tests for Transaction Boundaries
+The code uses `@Transactional`, but no test verifies what happens on failure. Does the rollback actually work? Does the connection pool recover? Are nested transactions behaving as expected? Test the failure path.
+
+### 6. No Tests for Concurrency-Sensitive Behavior
+"If it works sequentially, it'll work concurrently" — famous last words. Code that modifies shared state needs concurrent test coverage, especially in financial or inventory systems.
+
+### 7. Confusing Code Coverage with Confidence
+80% line coverage means nothing if the 20% you're missing is the error handling, the transaction boundaries, and the concurrency paths. Coverage measures what code was *executed*, not what behavior was *verified*.
+
+### 8. Tests That Know Too Much About Implementation
+```java
+// This test will break if you rename the private method or refactor the algorithm
+verify(dependency, times(1)).someInternalMethod("exact", "arguments");
+```
+Test behavior through public APIs. Testing implementation details makes refactoring painful and discourages improving the code.
+
+### 9. Ignoring API Contracts Between Services
+Team A changes a field from `amount` to `value`. Team B's service starts throwing 500s in production. Neither team's tests caught it, because Team A's tests mock the consumer and Team B's tests mock the provider. Contract tests catch this.
+
+## 15. Interview Questions
+
+Here are short, interview-friendly answers to common testing questions:
+
+### What is the difference between unit and integration tests?
+
+**Unit tests** verify a single class in isolation, using test doubles for dependencies. They're fast (milliseconds), focused, and test logic, not infrastructure. **Integration tests** verify that your code works with real external systems — real databases, real HTTP calls, real message brokers. They catch problems unit tests can't, like incorrect SQL or serialization issues, but run in seconds rather than milliseconds.
+
+### What should you mock in unit tests?
+
+Mock **external dependencies at architectural boundaries**: databases, HTTP clients, message queues, email senders, payment gateways, and the system clock. Don't mock value objects, simple domain logic, or the class under test. The heuristic: if calling it in a test would require starting infrastructure, mock it.
+
+### How does DI help testing?
+
+Dependency Injection — specifically constructor injection — lets you pass test doubles through the constructor instead of the class creating its own dependencies with `new`. This means you can test a service with an in-memory repository and a fake notification sender, instead of needing PostgreSQL and SMTP running. No framework, no reflection, no `@Autowired` required.
+
+### How would you test a money transfer?
+
+At multiple levels:
+- **Unit tests** for the domain logic: `Wallet.debit()`, `Money.subtract()`, currency matching.
+- **Integration tests** for the transfer orchestration with a real database: verify both wallets update in one transaction, rollback on failure, idempotency.
+- **Concurrency tests** to verify two simultaneous transfers from the same wallet don't create an overdraft.
+- **API tests** to verify the HTTP endpoint returns correct status codes and error responses.
+- **E2E tests** for the critical flow: create account → fund wallet → transfer → verify balances.
+
+### How would you test transaction rollback?
+
+Write an integration test that triggers a failure midway through the transaction and then verify the database state is unchanged. For example: debit wallet A, then throw an exception before crediting wallet B. After the test, query both wallets from the database and assert wallet A's balance was not changed — proving the rollback worked.
+
+### How would you test concurrent wallet debits?
+
+Use `ExecutorService`, `CountDownLatch`, and multiple threads. Create a wallet with 100 EUR. Submit two tasks that each debit 80 EUR, released simultaneously via a latch. Assert that exactly one succeeds, one fails with `InsufficientFundsException`, and the final balance is 20 EUR. Run this test multiple times to reduce false positives. Complement with a deterministic database-level test using `SELECT ... FOR UPDATE` or optimistic locking.
+
+### What are contract tests?
+
+Contract tests verify that the interface between two systems matches what both sides expect. They don't test behavior — they test *shape*. For REST APIs, contract tests verify response schemas match the OpenAPI spec. For events, they verify the JSON schema of published messages. For microservices using Pact, the consumer defines its expectations and the provider verifies them. Contract tests are especially valuable when teams evolve services independently.
+
+### How do you decide what to test?
+
+Based on **product risk**, not code coverage targets. Money movement, auth, and data integrity are critical — test them at multiple levels with concurrency and failure-path coverage. Notification sending and formatting are lower risk — unit tests plus integration smoke tests are usually enough. Ask: "If this breaks, what's the impact on the user and the business?"
+
+### Is high code coverage always good?
+
+No. 90% line coverage with no assertions on error handling, concurrency, or integration behavior is less valuable than 60% coverage that verifies critical business rules, failure paths, and transaction boundaries. Coverage measures what code was executed, not what was verified. You can get 100% coverage without a single meaningful assertion.
+
+### How do tests support product ownership?
+
+Tests encode product rules as executable specifications. A test that asserts "wallet balance must never go negative" protects the product from regressions — even if the original engineer leaves, even during aggressive refactoring. Tests are the safety net that lets you say "yes" to change requests with confidence. Without them, every change is a gamble. With them, product ownership means understanding the rules and knowing they're enforced.
+
+## 16. Conclusion
+
+A good testing strategy isn't about hitting a coverage number. It's about distributing confidence across the right levels so that when you push to production at 5 PM on a Friday, you're not holding your breath.
+
+The practical takeaway is straightforward:
+
+- **Unit test your business rules** — domain logic, value objects, pure computation. JUnit and Mockito, fast and focused. No Spring context needed.
+- **Integration test your infrastructure** — database queries, transactions, migrations, serialization. Testcontainers gives you real PostgreSQL in a container. These are slower but catch the problems unit tests structurally cannot.
+- **Contract test your service boundaries** — API schemas, event shapes, consumer expectations. Prevents teams from accidentally breaking each other.
+- **E2E test your critical flows** — the user journeys where failure is unacceptable. Keep these few and focused; don't let them become a maintenance burden.
+- **Test the failure paths** — timeouts, retries, rollbacks, constraint violations, concurrent access. The happy path is the easy part. Production reveals the rest.
+
+The wallet example throughout this article isn't just pedagogical. Financial systems are pure stress tests for testing strategy — they require correctness, consistency, concurrency safety, and failure resilience, all at once. If you can test a money transfer thoroughly, you can test anything.
+
+And when your colleague asks "what happens if the database goes down between the debit and the credit?" — you'll have the test that answers.
+
+<Quiz slug="testing-java-backends" />

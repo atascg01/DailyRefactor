@@ -670,6 +670,71 @@ const quizData: Record<string, QuizData> = {
       },
     ],
   },
+  "testing-java-backends": {
+    title: "Test Your Understanding",
+    questions: [
+      {
+        question: "What is the main purpose of the testing pyramid?",
+        options: [
+          "To mandate that 70% of all tests must be unit tests",
+          "To guide the distribution of tests across unit, integration, and E2E levels — balancing speed, confidence, and cost",
+          "To prove that E2E tests are always the most valuable type of test",
+          "To eliminate the need for integration tests entirely",
+        ],
+        correctIndex: 1,
+        explanation:
+          "The testing pyramid is a guideline, not a rigid rule. It suggests having many fast, focused unit tests; fewer but broader integration tests; and a small number of full-system E2E tests. The tradeoff is always speed vs. confidence — unit tests run in milliseconds but can't prove database queries work; E2E tests prove the full flow but are slow and fragile. The right distribution depends on your system's architecture and risk profile.",
+      },
+      {
+        question: "Why is mocking the database for repository logic generally a bad idea?",
+        options: [
+          "Because Mockito doesn't support JDBC mocking",
+          "Because it proves Mockito works, not that your SQL queries are correct — your test passes even with broken SQL",
+          "Because database mocking requires an enterprise Mockito license",
+          "Because mocked databases are always slower than real databases",
+        ],
+        correctIndex: 1,
+        explanation:
+          "When you mock a repository or JDBC template, you're testing your mock configuration, not the actual database interaction. Your test passes even if the SQL has a syntax error, the column names are wrong, the join produces incorrect results, or a constraint would be violated. Use Testcontainers to run a real PostgreSQL instance for repository tests — it catches problems unit tests structurally cannot.",
+      },
+      {
+        question: "How would you test that two concurrent wallet debits of 80 EUR from a 100 EUR wallet don't both succeed?",
+        options: [
+          "Write a unit test that mocks the database and returns different balances each time",
+          "Use ExecutorService, CountDownLatch, and multiple threads to submit simultaneous debit requests; assert exactly one succeeds, one fails, and the final balance is 20 EUR",
+          "Call debit() twice in a for loop — the second call will always fail because the first one already ran",
+          "Concurrency testing is impossible — just rely on code review",
+        ],
+        correctIndex: 1,
+        explanation:
+          "Use ExecutorService with a CountDownLatch to release multiple threads simultaneously, maximizing the race window. Each thread attempts to debit 80 EUR from a 100 EUR wallet. Assert exactly one thread succeeds (success counter = 1), exactly one fails with InsufficientFundsException (failure counter = 1), and the final wallet balance in the database is 20 EUR. Run multiple times to reduce false positives. Complement with deterministic database-level locking tests.",
+      },
+      {
+        question: "What are contract tests and when are they most valuable?",
+        options: [
+          "Legal documents that define service level agreements between teams",
+          "Tests that verify the interface shape between systems (API schemas, event formats, consumer expectations) — most valuable when teams evolve services independently in a microservices architecture",
+          "Tests that verify the full system works by simulating real user contracts",
+          "A type of unit test that verifies constructor contracts",
+        ],
+        correctIndex: 1,
+        explanation:
+          "Contract tests verify compatibility, not behavior. They ensure that a REST API response matches its OpenAPI spec, a Kafka event conforms to its JSON schema, or a consumer's expectations (defined via Pact) are satisfied by the provider. In microservices, where teams change services independently, contract tests catch breaking changes — like renaming a field or changing a type — before they reach production, without requiring full integration environments.",
+      },
+      {
+        question: "Is high code coverage (90%+) always a sign of a well-tested system?",
+        options: [
+          "Yes — high coverage guarantees the system works correctly",
+          "No — coverage measures what code was executed, not what behavior was verified; 90% line coverage with no transaction, concurrency, or failure-path tests provides false confidence",
+          "Yes, as long as SonarQube says the quality gate passed",
+          "No — but anything below 80% is automatically a poorly tested system",
+        ],
+        correctIndex: 1,
+        explanation:
+          "Code coverage is a measurement, not a goal. You can achieve 100% line coverage with tests that have no meaningful assertions — the code runs, but nothing verifies the output is correct. What matters is what's tested at what level: are transaction boundaries verified? Are concurrency paths covered? Are failure modes tested? A system with 60% coverage that tests critical business rules, failure paths, and integration points is far more reliable than one with 95% coverage from happy-path-only unit tests.",
+      },
+    ],
+  },
   "domain-driven-design": {
     title: "Test Your Understanding",
     questions: [
