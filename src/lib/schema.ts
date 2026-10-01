@@ -2,43 +2,21 @@
  * Generate JSON-LD structured data for different page types.
  */
 
-const BASE_URL = "https://dailyrefactor.dev";
-
-interface ArticleMeta {
-  slug: string;
-  title: string;
-  excerpt: string;
-  category: string;
-  date: string;
-  readTime: string;
-  image: string;
-  author: {
-    name: string;
-    avatar: string;
-    role: string;
-  };
-}
+import type { ArticleMeta } from "@/content/articles";
+import { SITE_URL } from "@/lib/site";
 
 export function webSiteSchema() {
   return {
     "@context": "https://schema.org",
     "@type": "WebSite",
     name: "DailyRefactor",
-    url: BASE_URL,
+    url: SITE_URL,
     description:
       "Your source for the latest in software engineering, tech news, and industry insights. Deep dives into Java, DevOps, and career advice.",
-    potentialAction: {
-      "@type": "SearchAction",
-      "target": {
-        "@type": "EntryPoint",
-        "urlTemplate": `${BASE_URL}/search?q={search_term_string}`,
-      },
-      "query-input": "required name=search_term_string",
-    },
   };
 }
 
-export function organizationSchema() {
+export function personSchema() {
   return {
     "@context": "https://schema.org",
     "@type": "Person",
@@ -48,7 +26,7 @@ export function organizationSchema() {
       "@type": "Organization",
       name: "Oracle",
     },
-    url: BASE_URL,
+    url: SITE_URL,
     sameAs: [
       "https://x.com/atascg",
       "https://github.com/atascg01",
@@ -67,7 +45,7 @@ export function articleSchema(article: ArticleMeta) {
     description: article.excerpt,
     image: article.image,
     datePublished: isoDate,
-    dateModified: isoDate,
+    dateModified: new Date(article.updatedAt ?? article.date).toISOString(),
     author: {
       "@type": "Person",
       name: article.author.name,
@@ -77,10 +55,10 @@ export function articleSchema(article: ArticleMeta) {
       "@type": "Person",
       name: article.author.name,
     },
-    url: `${BASE_URL}/blog/${article.slug}`,
+    url: `${SITE_URL}/blog/${article.slug}`,
     mainEntityOfPage: {
       "@type": "WebPage",
-      "@id": `${BASE_URL}/blog/${article.slug}`,
+      "@id": `${SITE_URL}/blog/${article.slug}`,
     },
   };
 }

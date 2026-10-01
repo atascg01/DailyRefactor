@@ -1,34 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-
-interface HeadingItem {
-  id: string;
-  text: string;
-  level: number;
-}
+import { useState, useCallback } from "react";
+import { useArticleHeadings } from "./useArticleHeadings";
 
 export default function MobileTOC() {
-  const [headings, setHeadings] = useState<HeadingItem[]>([]);
+  const headings = useArticleHeadings();
   const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    const article = document.querySelector<HTMLElement>("article.prose");
-    if (!article) return;
-
-    const elements = article.querySelectorAll("h2, h3");
-    const items: HeadingItem[] = [];
-    elements.forEach((el) => {
-      if (el.id) {
-        items.push({
-          id: el.id,
-          text: el.textContent || "",
-          level: el.tagName === "H2" ? 2 : 3,
-        });
-      }
-    });
-    setHeadings(items);
-  }, []);
 
   const handleClick = useCallback((e: React.MouseEvent, id: string) => {
     e.preventDefault();
@@ -46,9 +23,11 @@ export default function MobileTOC() {
     <div className="lg:hidden mb-8">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-4 py-3 rounded-xl 
+        aria-expanded={open}
+        aria-controls="mobile-toc"
+        className="w-full flex items-center justify-between px-4 py-3 rounded-xl
                    border border-[var(--border)] bg-[var(--card)] text-sm font-medium
-                   hover:border-blue-500/30 transition-colors"
+                   hover:border-stone-500/30 transition-colors"
       >
         <span>On this page</span>
         <svg
@@ -62,14 +41,14 @@ export default function MobileTOC() {
       </button>
 
       {open && (
-        <nav className="mt-2 p-3 rounded-xl border border-[var(--border)] bg-[var(--card)]">
+        <nav id="mobile-toc" aria-label="Table of Contents" className="mt-2 p-3 rounded-xl border border-[var(--border)] bg-[var(--card)]">
           <ul className="space-y-1">
             {headings.map((h) => (
               <li key={h.id}>
                 <a
                   href={`#${h.id}`}
                   onClick={(e) => handleClick(e, h.id)}
-                  className={`block py-1.5 text-sm text-[var(--muted-foreground)] 
+                  className={`block py-1.5 text-sm text-[var(--muted-foreground)]
                               hover:text-[var(--foreground)] transition-colors
                               ${h.level === 3 ? "pl-5" : ""}`}
                 >

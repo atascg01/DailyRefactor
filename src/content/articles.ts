@@ -5,6 +5,7 @@ export interface ArticleMeta {
   excerpt: string;
   category: string;
   date: string;
+  updatedAt?: string;
   readTime: string;
   image: string;
   author: {

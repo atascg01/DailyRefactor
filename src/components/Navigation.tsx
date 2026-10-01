@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import ThemeToggle from "./ThemeToggle";
+import { useScrollThreshold } from "./useScrollThreshold";
 
 const links = [
   { href: "/", label: "Home" },
@@ -14,19 +15,12 @@ const links = [
 
 export default function Navigation() {
   const pathname = usePathname();
+  return <NavigationContent key={pathname} pathname={pathname} />;
+}
+
+function NavigationContent({ pathname }: { pathname: string }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
-
-  useEffect(() => {
-    const handleScroll = () => setScrolled(window.scrollY > 10);
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    handleScroll();
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
-
-  useEffect(() => {
-    setIsMenuOpen(false);
-  }, [pathname]);
+  const scrolled = useScrollThreshold(10);
 
   const isActive = (href: string) => {
     if (href === "/") return pathname === "/";
@@ -42,14 +36,13 @@ export default function Navigation() {
       }`}
     >
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
+        <div className="flex items-center justify-between h-20">
           {/* Logo */}
           <Link
             href="/"
-            className="text-xl font-bold tracking-tight bg-gradient-to-r from-blue-500 to-blue-600 
-                       bg-clip-text text-transparent hover:from-blue-400 hover:to-blue-500 transition-all"
+            className="brand"
           >
-            DailyRefactor
+            DailyRefactor<span>.</span>
           </Link>
 
           {/* Desktop links */}
@@ -58,6 +51,8 @@ export default function Navigation() {
               <Link
                 key={href}
                 href={href}
+              onClick={() => setIsMenuOpen(false)}
+              aria-current={isActive(href) ? "page" : undefined}
                 className={`relative px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
                   isActive(href)
                     ? "text-[var(--foreground)]"
@@ -66,7 +61,7 @@ export default function Navigation() {
               >
                 {label}
                 {isActive(href) && (
-                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-0.5 bg-blue-500 rounded-full" />
+                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-6 h-0.5 bg-[var(--ring)] rounded-full" />
                 )}
               </Link>
             ))}
@@ -80,7 +75,9 @@ export default function Navigation() {
             <ThemeToggle />
             <button
               onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="p-2 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] 
+              aria-expanded={isMenuOpen}
+              aria-controls="mobile-navigation"
+              className="p-2 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)]
                          hover:bg-[var(--accent)] transition-colors"
               aria-label="Toggle menu"
             >
@@ -100,6 +97,8 @@ export default function Navigation() {
 
       {/* Mobile menu */}
       <div
+        id="mobile-navigation"
+        inert={!isMenuOpen}
         className={`sm:hidden overflow-hidden transition-all duration-300 ease-in-out ${
           isMenuOpen ? "max-h-64 border-t border-[var(--border)]" : "max-h-0"
         }`}
@@ -109,6 +108,8 @@ export default function Navigation() {
             <Link
               key={href}
               href={href}
+                onClick={() => setIsMenuOpen(false)}
+                aria-current={isActive(href) ? "page" : undefined}
               className={`block px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 isActive(href)
                   ? "bg-[var(--accent)] text-[var(--foreground)]"

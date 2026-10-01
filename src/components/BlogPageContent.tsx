@@ -30,7 +30,7 @@ export default function BlogPageContent() {
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-16">
       <div className="mb-12">
-        <h1 className="text-4xl font-bold tracking-tight mb-3">Blog</h1>
+        <h1 className="page-title mb-3">The journal.</h1>
         <p className="text-[var(--muted-foreground)] text-lg">
           Articles on software engineering, tools, and best practices
         </p>
@@ -46,25 +46,28 @@ export default function BlogPageContent() {
         >
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
+        <label htmlFor="article-search" className="sr-only">Search articles</label>
         <input
+          id="article-search"
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           placeholder="Search articles…"
           className="w-full max-w-md pl-10 pr-4 py-2.5 rounded-xl border border-[var(--border)] 
                      bg-[var(--background)] text-sm placeholder:text-[var(--muted-foreground)]
-                     focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-colors"
+                     focus:outline-none focus:border-stone-500 focus:ring-1 focus:ring-stone-500/30 transition-colors"
         />
       </div>
 
       {/* Categories */}
       <div className="flex flex-wrap gap-2 mb-10">
         <button
+          aria-pressed={activeCategory === null}
           onClick={() => setActiveCategory(null)}
           className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
             activeCategory === null
-              ? "bg-blue-600 text-white"
-              : "border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:border-blue-500/30 hover:text-[var(--foreground)]"
+              ? "bg-stone-600 text-white"
+              : "border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:border-stone-500/30 hover:text-[var(--foreground)]"
           }`}
         >
           All
@@ -72,11 +75,12 @@ export default function BlogPageContent() {
         {categories.map((category) => (
           <button
             key={category}
+            aria-pressed={activeCategory === category}
             onClick={() => setActiveCategory(category)}
             className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${
               activeCategory === category
-                ? "bg-blue-600 text-white"
-                : "border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:border-blue-500/30 hover:text-[var(--foreground)]"
+                ? "bg-stone-600 text-white"
+                : "border border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:border-stone-500/30 hover:text-[var(--foreground)]"
             }`}
           >
             {category}
@@ -86,7 +90,7 @@ export default function BlogPageContent() {
 
       {/* Articles Grid */}
       {filteredArticles.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-10 gap-y-12">
           {filteredArticles.map((article: ArticleMeta) => (
             <ArticleCard key={article.id} {...article} />
           ))}

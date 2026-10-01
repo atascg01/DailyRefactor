@@ -1,21 +1,16 @@
+import { SITE_URL } from "@/lib/site";
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import Navigation from "@/components/Navigation";
 import Footer from "@/components/Footer";
 import JsonLd from "@/components/JsonLd";
-import { webSiteSchema, organizationSchema } from "@/lib/schema";
+import { webSiteSchema, personSchema } from "@/lib/schema";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+const geistSans = GeistSans;
+const geistMono = GeistMono;
 
 export const metadata: Metadata = {
   title: {
@@ -24,7 +19,8 @@ export const metadata: Metadata = {
   },
   description:
     "Your source for the latest in software engineering, tech news, and industry insights. Deep dives into Java, DevOps, and career advice.",
-  metadataBase: new URL("https://dailyrefactor.dev"),
+  alternates: { canonical: SITE_URL },
+  metadataBase: new URL(SITE_URL),
   icons: {
     icon: "/favicon.svg",
   },
@@ -49,7 +45,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable}`}>
       <head>
         <JsonLd data={webSiteSchema()} />
-        <JsonLd data={organizationSchema()} />
+        <JsonLd data={personSchema()} />
       </head>
       <body className="font-sans antialiased">
         <ThemeProvider>

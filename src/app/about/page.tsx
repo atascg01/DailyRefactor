@@ -1,3 +1,4 @@
+import { siteUrl } from "@/lib/site";
 import { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
@@ -7,13 +8,13 @@ export const metadata: Metadata = {
   description:
     "Andrés Tascón — Senior Software Engineer at Oracle, working on Java Management Service. Based in León, Spain.",
   alternates: {
-    canonical: "https://dailyrefactor.dev/about",
+    canonical: siteUrl("/about"),
   },
   openGraph: {
     title: "About | DailyRefactor",
     description:
       "Andrés Tascón — Senior Software Engineer at Oracle. Learn more about the person behind DailyRefactor.",
-    url: "https://dailyrefactor.dev/about",
+    url: siteUrl("/about"),
     type: "profile",
   },
   twitter: {
@@ -28,7 +29,7 @@ export const metadata: Metadata = {
 export default function About() {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-16">
-      <h1 className="text-4xl font-bold tracking-tight mb-8">About</h1>
+      <h1 className="page-title mb-12">About</h1>
 
       <div className="grid md:grid-cols-[1fr_280px] gap-12">
         <div className="prose prose-lg dark:prose-invert max-w-none">
@@ -70,7 +71,7 @@ export default function About() {
               href="https://x.com/atascg"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline"
+              className="text-[var(--link)] underline"
             >
               X (Twitter)
             </Link>{" "}
@@ -79,7 +80,7 @@ export default function About() {
               href="https://github.com/atascg01"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline"
+              className="text-[var(--link)] underline"
             >
               GitHub
             </Link>.
@@ -95,6 +96,7 @@ export default function About() {
               fill
               className="object-cover"
               priority
+              sizes="(max-width: 768px) 100vw, 280px"
             />
           </div>
 

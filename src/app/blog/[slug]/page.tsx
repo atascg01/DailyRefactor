@@ -1,3 +1,4 @@
+import { SITE_URL, siteUrl } from "@/lib/site";
 import { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
@@ -26,7 +27,7 @@ export async function generateMetadata({
   const article = getArticleBySlug(slug);
   if (!article) return { title: "Not Found" };
 
-  const url = `https://dailyrefactor.dev/blog/${slug}`;
+  const url = `${SITE_URL}/blog/${slug}`;
   const publishedTime = new Date(article.date).toISOString();
 
   return {
@@ -70,7 +71,7 @@ export default async function BlogPost({
     `@/content/blog/${article.slug}.mdx`
   );
 
-  const url = `https://dailyrefactor.dev/blog/${slug}`;
+  const url = `${SITE_URL}/blog/${slug}`;
 
   return (
     <>
@@ -78,8 +79,8 @@ export default async function BlogPost({
       <JsonLd data={articleSchema(article)} />
       <JsonLd
         data={breadcrumbSchema([
-          { name: "Home", url: "https://dailyrefactor.dev" },
-          { name: "Blog", url: "https://dailyrefactor.dev/blog" },
+          { name: "Home", url: SITE_URL },
+          { name: "Blog", url: siteUrl("/blog") },
           { name: article.title, url },
         ])}
       />
@@ -137,11 +138,11 @@ export default async function BlogPost({
         </nav>
 
         {/* Article Header */}
-        <header className="mb-10">
+        <header className="reading-header mb-10">
           <div className="flex items-center gap-3 mb-4">
             <span
               className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium 
-                           bg-blue-500/10 text-blue-500 border border-blue-500/20"
+                           bg-stone-500/10 text-[var(--link)] border border-stone-500/20"
             >
               {article.category}
             </span>
@@ -181,18 +182,19 @@ export default async function BlogPost({
         </header>
 
         {/* Featured Image */}
-        <div className="relative aspect-video mb-12 rounded-2xl overflow-hidden border border-[var(--border)]">
+        <div className="relative aspect-[21/9] mb-12 rounded-lg overflow-hidden border border-[var(--border)]">
           <Image
             src={article.image}
             alt={article.title}
             fill
-            className="object-cover"
+            className="object-cover saturate-50"
             priority
+            sizes="(max-width: 1152px) 100vw, 1152px"
           />
         </div>
 
         {/* Mobile TOC (below lg breakpoint) */}
-        <MobileTOC />
+        <MobileTOC key={slug} />
 
         {/* Content + TOC sidebar */}
         <div className="flex gap-10 lg:gap-16">
@@ -210,7 +212,7 @@ export default async function BlogPost({
           </div>
 
           {/* Desktop TOC sidebar */}
-          <TableOfContents />
+          <TableOfContents key={slug} />
         </div>
       </div>
 

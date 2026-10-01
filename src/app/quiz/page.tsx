@@ -1,3 +1,4 @@
+import { siteUrl } from "@/lib/site";
 import { Metadata } from "next";
 import QuizPageContent from "@/components/QuizPageContent";
 
@@ -6,13 +7,13 @@ export const metadata: Metadata = {
   description:
     "Test your software engineering knowledge with interactive quizzes on Java, Git, Architecture, AI, and more. Real technical interview questions with detailed explanations.",
   alternates: {
-    canonical: "https://dailyrefactor.dev/quiz",
+    canonical: siteUrl("/quiz"),
   },
   openGraph: {
     title: "Interview Prep Quiz | DailyRefactor",
     description:
       "Test your software engineering knowledge with interactive quizzes on Java, Git, Architecture, AI, and more.",
-    url: "https://dailyrefactor.dev/quiz",
+    url: siteUrl("/quiz"),
     type: "website",
   },
   twitter: {

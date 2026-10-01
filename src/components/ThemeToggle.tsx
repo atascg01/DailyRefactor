@@ -1,17 +1,17 @@
 "use client";
 
 import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
+
+const subscribe = () => () => {};
 
 export default function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => setMounted(true), []);
+  const { resolvedTheme: theme, setTheme } = useTheme();
+  const mounted = useSyncExternalStore(subscribe, () => true, () => false);
 
   if (!mounted) {
     return (
-      <button className="w-9 h-9 rounded-lg border border-transparent" aria-label="Toggle theme">
+      <button disabled className="w-9 h-9 rounded-lg border border-transparent" aria-label="Toggle theme">
         <span className="sr-only">Toggle theme</span>
       </button>
     );

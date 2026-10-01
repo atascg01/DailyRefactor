@@ -1,37 +1,11 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-
-interface HeadingItem {
-  id: string;
-  text: string;
-  level: number;
-}
+import { useArticleHeadings } from "./useArticleHeadings";
 
 export default function TableOfContents() {
-  const [headings, setHeadings] = useState<HeadingItem[]>([]);
+  const headings = useArticleHeadings();
   const [activeId, setActiveId] = useState<string>("");
-
-  // Extract headings from the article content
-  useEffect(() => {
-    const article = document.querySelector<HTMLElement>("article.prose");
-    if (!article) return;
-
-    const elements = article.querySelectorAll("h2, h3");
-    const items: HeadingItem[] = [];
-
-    elements.forEach((el) => {
-      if (el.id) {
-        items.push({
-          id: el.id,
-          text: el.textContent || "",
-          level: el.tagName === "H2" ? 2 : 3,
-        });
-      }
-    });
-
-    setHeadings(items);
-  }, []);
 
   // Track active heading with IntersectionObserver
   useEffect(() => {
@@ -96,7 +70,7 @@ export default function TableOfContents() {
                 }
                 ${
                   activeId === heading.id
-                    ? "border-blue-500 text-blue-600 dark:text-blue-400 font-medium"
+                    ? "border-stone-500 text-[var(--link)] dark:text-[var(--link)] font-medium"
                     : "border-transparent text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:border-[var(--border)]"
                 }
               `}

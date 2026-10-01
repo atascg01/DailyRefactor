@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 
 interface CodeBlockProps {
   children: React.ReactElement;
@@ -10,15 +10,22 @@ interface CodeBlockProps {
 
 export default function CodeBlock({ children, ...props }: CodeBlockProps) {
   const [copied, setCopied] = useState(false);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [copyError, setCopyError] = useState(false);
+  useEffect(() => () => { if (copyTimer.current) clearTimeout(copyTimer.current); }, []);
   const language = props["data-language"] ?? "";
 
   const handleCopy = async () => {
-    const childProps = (children as any)?.props;
-    if (!childProps?.children) return;
-    const code = extractText(childProps.children);
-    await navigator.clipboard.writeText(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    const code = extractText(children);
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setCopyError(false);
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+      copyTimer.current = setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopyError(true);
+    }
   };
 
   return (
@@ -53,6 +60,7 @@ export default function CodeBlock({ children, ...props }: CodeBlockProps) {
           </button>
         </div>
       )}
+      {copyError && <p role="status" className="px-4 py-2 text-sm">Copy failed. Select the code and copy it manually.</p>}
       <pre className={`bg-[#0d1117] overflow-x-auto ${language ? "rounded-b-xl" : "rounded-xl"}`}>
         {children}
       </pre>

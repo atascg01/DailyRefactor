@@ -1,75 +1,55 @@
-# DailyRefactor - Modern Blog Platform
+# DailyRefactor
 
-A modern blog platform built with Next.js, TypeScript, and Tailwind CSS for sharing software engineering articles and tech news.
+A software engineering blog and interview practice site built with Next.js 16, React 19, TypeScript, Tailwind CSS 4, and local MDX content.
 
-## Features
+## Local development
 
-- 🎨 Modern and responsive design
-- 📱 Mobile-first approach
-- ⚡ Fast page loads with Next.js
-- 🎯 SEO optimized
-- 📝 Rich text content support
-- 🔍 Category-based article filtering
-- 🔄 Social media sharing
+Use Node.js 22.18 or later (Node 24 recommended) and npm. The Node requirement supports the TypeScript regression tests as well as Next.js.
 
-## Getting Started
-
-### Prerequisites
-
-- Node.js 18.x or later
-- npm or yarn
-
-### Installation
-
-1. Clone the repository:
-```bash
-git clone https://github.com/yourusername/dailyrefactor.git
-cd dailyrefactor
-```
-
-2. Install dependencies:
-```bash
-npm install
-# or
-yarn install
-```
-
-3. Run the development server:
-```bash
+```sh
+npm ci
 npm run dev
-# or
-yarn dev
 ```
 
-4. Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000. For a production preview:
 
-## Project Structure
-
-```
-dailyrefactor/
-├── public/          # Static files
-├── src/
-│   ├── app/         # Next.js app directory
-│   ├── components/  # Reusable components
-│   └── styles/      # Global styles
-├── package.json
-└── README.md
+```sh
+npm run build
+npm run start
 ```
 
-## Contributing
+Geist fonts are bundled locally, so builds do not fetch Google Fonts. Cover images use Next.js image optimization and require access to images.unsplash.com at runtime. No environment variables or backend services are required.
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+## Checks
 
-## License
+```sh
+npm run lint -- --max-warnings=0
+npm run typecheck
+npm test
+npm run build
+```
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Production builds enforce TypeScript validation. GitHub Actions runs all four checks on pushes and pull requests. Regression tests cover first-answer scoring, invalid/repeated answers, completion, empty sessions, and restart. Browser validation is still needed for rendering, navigation, and accessibility.
 
-## Acknowledgments
+## Source layout
 
-- [Next.js](https://nextjs.org/)
-- [Tailwind CSS](https://tailwindcss.com/)
-- [TypeScript](https://www.typescriptlang.org/)
+- `src/app`: routes, layouts, global CSS, metadata, sitemap, and robots.
+- `src/components`: reusable UI, shared quiz session, reading tools, navigation, and themes.
+- `src/content/articles.ts`: article metadata, ordered newest first.
+- `src/content/blog`: MDX article bodies.
+- `src/content/quiz-questions.ts`: five questions per article, answers, and explanations.
+- `src/lib`: site URL/category helpers, structured data, and quiz state transitions.
+- `public`: favicon, static assets, and author photo.
+- `tests`: Node regression tests.
+
+## Adding content
+
+1. Add an article to `src/content/articles.ts` with a unique ID and slug. Use a valid publication date; set optional `updatedAt` when editing published content.
+2. Add the matching `src/content/blog/<slug>.mdx` file. Use headings and fenced code blocks; check manual table-of-contents links.
+3. Add questions under the same slug in `src/content/quiz-questions.ts`. Import `Quiz` and render `<Quiz slug="your-slug" />` in the article.
+4. For a new category, add explanatory copy in `src/app/blog/category/[name]/page.tsx`.
+5. Run the checks, preview the article and quiz, then deploy the new build through your hosting provider.
+
+The newsletter displays a Coming soon notice. It does not accept email addresses or promise subscriptions. Quiz sessions are browser state; scores count the first response to each question, and Retry restarts the same topics.
+
+See [PROJECT_MAP.md](PROJECT_MAP.md) for the architecture review and remediation record. No license grant is declared in this repository.

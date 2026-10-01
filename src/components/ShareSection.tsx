@@ -1,5 +1,7 @@
 "use client";
 
+import { SITE_URL } from "@/lib/site";
+
 import { useState } from "react";
 
 interface ShareSectionProps {
@@ -9,7 +11,7 @@ interface ShareSectionProps {
 
 export default function ShareSection({ title, slug }: ShareSectionProps) {
   const [copied, setCopied] = useState(false);
-  const url = `https://dailyrefactor.dev/blog/${slug}`;
+  const url = `${SITE_URL}/blog/${slug}`;
 
   const handleCopy = async () => {
     try {

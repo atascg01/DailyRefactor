@@ -1,5 +1,7 @@
 "use client";
 
+import { SITE_URL } from "@/lib/site";
+
 import { useState } from "react";
 
 interface ShareTopProps {
@@ -9,7 +11,7 @@ interface ShareTopProps {
 
 export default function ShareTop({ title, slug }: ShareTopProps) {
   const [copied, setCopied] = useState(false);
-  const url = `https://dailyrefactor.dev/blog/${slug}`;
+  const url = `${SITE_URL}/blog/${slug}`;
 
   const handleCopy = async () => {
     try {
@@ -39,7 +41,7 @@ export default function ShareTop({ title, slug }: ShareTopProps) {
     <div className="flex items-center gap-1.5 ml-4">
       <button
         onClick={shareX}
-        className="p-2 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] 
+        className="p-2 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)]
                    hover:bg-[var(--accent)] transition-colors"
         aria-label="Share on X"
         title="Share on X"
@@ -50,7 +52,7 @@ export default function ShareTop({ title, slug }: ShareTopProps) {
       </button>
       <button
         onClick={handleCopy}
-        className="p-2 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] 
+        className="p-2 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)]
                    hover:bg-[var(--accent)] transition-colors relative"
         aria-label="Copy link"
         title="Copy link"

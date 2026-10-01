@@ -1,3 +1,4 @@
+import { siteUrl } from "@/lib/site";
 import { Metadata } from "next";
 import BlogPageContent from "@/components/BlogPageContent";
 
@@ -6,13 +7,13 @@ export const metadata: Metadata = {
   description:
     "Articles on software engineering, Java, DevOps, Git, and career insights. Deep dives with practical examples and real-world context.",
   alternates: {
-    canonical: "https://dailyrefactor.dev/blog",
+    canonical: siteUrl("/blog"),
   },
   openGraph: {
     title: "Blog | DailyRefactor",
     description:
       "Articles on software engineering, Java, DevOps, Git, and career insights.",
-    url: "https://dailyrefactor.dev/blog",
+    url: siteUrl("/blog"),
     type: "website",
   },
   twitter: {
