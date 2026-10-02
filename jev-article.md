@@ -1,0 +1,192 @@
+# My Jev Experiment: Choosing Effort for Codex and Claude Code
+
+I started using Jev because I wanted a coding agent to spend less reasoning on routine edits and more on difficult work. A local rename and an intermittent concurrency bug shouldn't need the same budget.
+
+Jev is TypeSafe AI's decision model. You supply context, ask a typed question and define the possible answers. For a choice question, it returns a selection and probabilities. That makes it useful for request classification, tool selection, model routing and evaluation against a rubric. [TypeSafe's introduction](https://typesafe.ai/blog/introducing-system-one-models-and-jev) describes these applications.
+
+My experiment began with model routing. I now want Jev to recommend reasoning effort while keeping the coding model fixed. The recommendation can be used with Codex or Claude Code. Applying it needs a separate client setting: a system prompt alone doesn't change the native effort of a running Codex turn.
+
+Below are my recorded setup, the problem I ran into, and a reproducible workflow that takes an effort recommendation through to a new coding session. I haven't measured task-level savings yet.
+
+## Why I moved away from model routing
+
+My first policy asked Jev to choose the lowest sufficient model and reasoning level. The original lanes were:
+
+```text
+SMALL  → Luna, low reasoning
+MEDIUM → Luna, medium reasoning
+HIGH   → Luna, high reasoning
+ESCALATE → Sol, high reasoning
+```
+
+This looks sensible for independent tasks. Long coding conversations make the calculation harder. The next request includes project instructions, files, previous messages and tool results. A cheaper model may have to process that history without the cache benefit the previous model had.
+
+Claude Code documents that each model has its own cache: switching models causes the next request to read the conversation uncached. [Its prompt caching documentation](https://code.claude.com/docs/en/prompt-caching) explains the behavior. That doesn't establish how every Codex model behaves, but it gives me a reason to measure cache usage before assuming routing saves money.
+
+The comparison I care about is:
+
+```text
+Cost to finish the task =
+  Jev decisions
+  + coding requests, including cached and uncached input
+  + retries and verification
+```
+
+Cache misses seem like a problem worth investigating in my routing experiment. I don't have measurements that isolate their cost. Keeping the model fixed removes one source of variation and lets me test a narrower question: how much effort does this task need?
+
+Even then, effort changes can affect caching. Anthropic distinguishes top-level effort changes, which restart the cache, from supported per-message effort changes, which preserve it. The details depend on the model and integration. [Claude's effort documentation](https://platform.claude.com/docs/en/build-with-claude/effort) covers those requirements. Starting a new session, as the walkthrough below does, also doesn't demonstrate cache preservation within an existing conversation.
+
+## What my Codex setup actually does
+
+I put the connection policy in my global `~/.codex/AGENTS.md`, so new chats know how to consult Jev. It tells the agent to read `AI_GATEWAY_API_KEY` from the environment, send it only in the authorization header, and use:
+
+```text
+Model: typesafe-ai/jev
+POST https://ai-gateway.vercel.sh/v1/evaluate
+Content-Type: application/json
+```
+
+The original prompt also required the agent to inspect its diff and run deterministic checks before asking Jev whether to continue, retry or escalate. Tests, type checks and compiler results are evidence for that decision.
+
+You can download [the exact original prompt and the current global instructions](/downloads/jev-system-prompt.md). They capture two stages of the experiment: the original routing policy and the later connection and recovery instructions. The effort-only workflow below is an extension you can reproduce, rather than a claim that those files already implement automatic effort changes.
+
+My recorded Codex defaults are:
+
+```toml
+model = "gpt-6.1-sol"
+model_reasoning_effort = "medium"
+```
+
+That last line matters. Asking Jev for `low` doesn't alter a client configured to use `medium`. The choice has to reach the setting before the coding request starts.
+
+Codex took more work because the first obstacle was access. The agent initially reported that it had no Jev tool. A PowerShell HTTP call gave it a way to connect, but a chat-completions request was rejected: Jev needs the evaluation endpoint. The working format uses `/v1/evaluate`, a named `questions` object, and choices under `criteria`. [Vercel's HTTP API announcement](https://vercel.com/changelog/ai-gateway-now-supports-typesafe-clients-and-http-api-for-jev) documents that interface.
+
+The sandbox was another obstacle. A normal request failed, while a network-enabled retry returned HTTP 200 and a structured evaluation. I added recovery instructions to the global prompt: try the current environment first, then request a network-enabled retry if outbound access is blocked, subject to the client's approval rules.
+
+Those successful tests established connectivity. They didn't establish automatic control over Codex's native effort. A fresh request while revising this article on October 2 returned HTTP 403 after the network retry, so the sample answer below is illustrative. Earlier access doesn't guarantee that a new request is authorized.
+
+## A reproducible effort decision
+
+This version asks directly for `low`, `medium` or `high`, so there is no extra mapping from routing lanes. Check that your selected coding model supports those levels before using the result.
+
+The criteria describe uncertainty and scope. Prompt length would be a poor substitute: "fix the deadlock" is short, but the investigation may be difficult.
+
+| Effort | What the policy asks Jev to recognize |
+| --- | --- |
+| `low` | A local mechanical edit with clear instructions and an obvious check |
+| `medium` | Work across several files with understood behavior and a reproducible check |
+| `high` | An uncertain cause, concurrency risk, security-sensitive behavior or architectural tradeoffs |
+
+Save [this PowerShell helper](/downloads/jev-effort.ps1) as `jev-effort.ps1`. With a Gateway key already set in your environment, it submits the task and returns only a validated effort value:
+
+```powershell
+param([Parameter(Mandatory)][string]$Task)
+
+if (-not $env:AI_GATEWAY_API_KEY) {
+    throw 'AI_GATEWAY_API_KEY is not set.'
+}
+
+$body = @{
+    model = 'typesafe-ai/jev'
+    state = $Task
+    questions = @{
+        effort = @{
+            type = 'choice'
+            instructions = 'Choose the lowest sufficient reasoning effort.'
+            criteria = @{
+                low = 'A local mechanical edit with clear instructions and an obvious check.'
+                medium = 'Several files, understood behavior, and a reproducible check.'
+                high = 'Uncertain cause, concurrency risk, security-sensitive behavior, or architectural tradeoffs.'
+            }
+        }
+    }
+} | ConvertTo-Json -Depth 8
+
+try {
+    $result = Invoke-RestMethod -Method Post `
+        -Uri 'https://ai-gateway.vercel.sh/v1/evaluate' `
+        -Headers @{ Authorization = "Bearer $env:AI_GATEWAY_API_KEY" } `
+        -ContentType 'application/json' -Body $body -TimeoutSec 30
+} catch {
+    throw 'Jev request failed. Check network access and Gateway authorization.'
+}
+
+$answer = $result.answers.effort
+if ($answer.type -ne 'choice' -or
+    $answer.choice -cnotin @('low', 'medium', 'high')) {
+    throw 'Jev did not return a supported effort choice.'
+}
+
+$answer.choice
+```
+
+The response shape is defined in [Vercel's evaluation API documentation](https://vercel.com/docs/ai-gateway/modalities/evaluation). The allowlist prevents an unexpected answer from becoming a client setting. A failed request stops the helper; it doesn't quietly substitute `low`. The error message also avoids dumping request headers or secret-bearing exception details.
+
+Use a specific task with enough context for the decision:
+
+```powershell
+$task = 'In the price formatting function, rename the local variable total to subtotal and update its references. Do not change behavior. Run the existing formatting tests.'
+$effort = .\jev-effort.ps1 -Task $task
+$effort
+```
+
+For that task, `low` would fit the policy. An illustrative response excerpt would be:
+
+```json
+{
+  "answers": {
+    "effort": {
+      "type": "choice",
+      "choice": "low"
+    }
+  }
+}
+```
+
+This excerpt omits probabilities and usage metadata. It is an example of the format, not a response captured from the fresh request. A typed answer can still be a poor judgment; inspect the recommendation before applying it.
+
+## Applying the choice in Codex and Claude Code
+
+For a new Codex CLI session, pass the validated value through its configuration override. This keeps your configured model and overrides effort for this invocation:
+
+```powershell
+codex -c ('model_reasoning_effort="' + $effort + '"') $task
+```
+
+Codex supports `-c key=value` overrides; available effort values depend on the model. See the [CLI reference](https://developers.openai.com/codex/cli/reference/) and [configuration reference](https://developers.openai.com/codex/config-reference/). Check the active effort setting in the client before letting it start work. In the desktop app, apply the recommendation through the effort selector before submitting the task.
+
+Claude Code exposes an effort flag for a new session:
+
+```powershell
+claude --effort $effort $task
+```
+
+For an existing Claude Code session, `/effort low` changes the setting for subsequent requests. Check the session's effort indicator. [Claude Code's model configuration documentation](https://code.claude.com/docs/en/model-config) describes the supported controls. This is a documented adaptation of the workflow; my recorded connection tests were in Codex.
+
+The manual step makes the boundary visible: Jev recommends, the client applies, and the coding model implements. Automatically changing effort inside an ongoing conversation would need a client or API integration that explicitly supports it. The global prompt by itself isn't that integration.
+
+After the task, inspect the diff and run its relevant checks. If a rename changes behavior or tests fail, fix the work and reassess the effort. Jev's recommendation doesn't certify the patch.
+
+## What it costs, and what I still need to measure
+
+I started through Vercel AI Gateway during its free Jev launch promotion in September. That explains the access path I chose; it shouldn't be treated as an ongoing free offer.
+
+Vercel's model listing gives an input price of $0.04 per million tokens. TypeSafe's direct API documentation lists $0.042 per million input tokens, with output free. Check the rate for the access path you use: [Vercel's model listing](https://vercel.com/ai-gateway/models/jev) and [TypeSafe's pricing documentation](https://docs.typesafe.ai/models).
+
+At the Gateway's listed input rate, a decision with 2,000 billed input tokens costs $0.00008. A thousand such decisions cost $0.08. Count the full billed input, including the criteria, rather than just the task text. The evaluation response includes usage and Gateway cost metadata for checking the actual charge.
+
+That makes the decision inexpensive. It doesn't prove the coding task becomes cheaper. Too little effort can cause retries; too much can waste reasoning on a routine edit. A useful policy would avoid unnecessary reasoning while still completing difficult work reliably.
+
+To test this setup, compare a fixed-effort baseline with Jev-selected effort on the same tasks and model, using fresh sessions and the same checks. Record:
+
+| Measure | Why it belongs in the comparison |
+| --- | --- |
+| Completed tasks passing the same checks | A lower bill is useful only if the work succeeds |
+| Total task cost, including Jev and retries | Captures the full expense of reaching a result |
+| Cached and uncached input, reasoning and output tokens | Helps explain where the difference comes from |
+| Elapsed time and manual corrections | Reveals costs that a token bill misses |
+
+Run multiple trials and keep the task mix visible. Success on local renames wouldn't establish that the same policy helps with uncertain debugging work.
+
+For now, I have a documented connection experiment and a workflow readers can reproduce through an explicit effort setting. The next evidence I want is whether it completes the same work with fewer paid tokens, fewer corrections, or both. Until then, I can justify the low cost of asking Jev; I can't put a savings percentage on the result.
+

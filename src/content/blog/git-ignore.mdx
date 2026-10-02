@@ -1,12 +1,12 @@
 import Quiz from "@/components/Quiz";
 
-<p>Nowadays, every developer out there must be familiar with some version control system. I have now worked in 5 different jobs. Every single one of them was using some kind of version control system.</p>
+<p>I have now worked in 5 different jobs. Every single one used some kind of version control system.</p>
 
 <p>Even though there are many of them, the most used by far is Git.</p>
 
-<p>When working on a real project, we often need to create or modify a file we don't want to be added to the repository. The most common scenario for a backend developer is probably some local file configuration to access a local database or some kind of parameters that need to be passed to the execution of the server itself.</p>
+<p>When working on a project, we often need to create or modify a file we don't want to be added to the repository. The most common scenario for a backend developer is probably some local file configuration to access a local database or some kind of parameters that need to be passed to the execution of the server itself.</p>
 
-<p>For a frontend developer, you may be sick of hearing this but in case you forgot it, I'll remind you: **Never upload the `node_modules` folder!** The `node_modules` folder contains all dependencies of a project and is generated via `npm install`. This is equivalent to the dependencies folder of a Java project using Maven — imagine uploading that to your Git repository 😅</p>
+<p>For a frontend developer, you may be sick of hearing this but in case you forgot it, I'll remind you: **Never upload the `node_modules` folder!** The `node_modules` folder contains all dependencies of a project and is generated via `npm install`. This is equivalent to the dependencies folder of a Java project using Maven. Imagine uploading that to your Git repository 😅</p>
 
 ## Table of Contents
 
@@ -18,7 +18,7 @@ import Quiz from "@/components/Quiz";
 
 ## 1. Introduction
 
-The article introduction — read on to learn how to manage ignored files in Git.
+Git offers shared and local configuration for ignoring files.
 
 ## 2. .gitignore file
 
@@ -52,15 +52,15 @@ yarn-debug.log*
 yarn-error.log*
 ```
 
-The pros of using this approach are quite evident: we have a **shared file** with all the developers in our team, because this file is uploaded to the git repository. If we, as a team, want to ignore some files or folders for all of us, we just add those to the `.gitignore` file.
+The `.gitignore` file is shared with the team because it is uploaded to the Git repository. If we, as a team, want to ignore some files or folders for all of us, we just add those to the `.gitignore` file.
 
-But precisely because it's a shared file — what if we want to ignore a private file that shouldn't be uploaded? We can't do it through `.gitignore`.
+For a private file that shouldn't be uploaded, we need a local ignore rule. We can't do it through `.gitignore`.
 
 ## 3. Global exclude file
 
-There is a file at `.git/info/exclude` whose purpose is to ignore private files. This configuration **won't be pushed** to the repository — it's a private, local configuration.
+There is a file at `.git/info/exclude` whose purpose is to ignore private files. This configuration won't be pushed to the repository. It stays local.
 
-The idea is the same as `.gitignore`, but this file is never shared. This approach is incredibly beneficial for local configuration files.
+The idea is the same as `.gitignore`, but this file is never shared. It is useful for local configuration files.
 
 ## 4. Example
 
@@ -78,7 +78,7 @@ Since `local.conf` is my personal and private local configuration, I'll add it t
 local.conf
 ```
 
-But if we run `git status` we'll find a surprise — it's still showing as added!
+But `git status` still shows it as added:
 
 ```bash
 PS D:\Projects\git-testing> git status
@@ -111,8 +111,6 @@ Changes to be committed:
 
 ## 5. Conclusion
 
-Now that you've learned how to ignore files in git, what are you waiting for? Stop wasting your time modifying that local configuration file — add it to the `excludes` file or talk to your team about adding it to the `.gitignore` file.
-
-I hope you enjoyed this quick post. Do you know some other ways to ignore files in Git? Let me know!
+For local configuration, add the file to `excludes`. For files the whole team should ignore, discuss adding a rule to `.gitignore`.
 
 <Quiz slug="git-ignore" />

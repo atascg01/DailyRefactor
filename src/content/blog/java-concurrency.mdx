@@ -1,6 +1,6 @@
 import Quiz from "@/components/Quiz";
 
-<p>Concurrency in Java is a powerful tool that allows developers to build efficient, high-performance applications capable of executing multiple tasks simultaneously. I want to delve into two pivotal components: <code>ExecutorService</code> and <code>Future</code>. These classes provide a structured way to manage and control asynchronous tasks, making your code more scalable and easier to maintain.</p>
+<p>Java provides <code>ExecutorService</code> to manage asynchronous tasks and <code>Future</code> to track their results. Together, they let you submit work, wait for results, and manage task execution without handling each thread directly.</p>
 
 ## Table of Contents
 
@@ -22,7 +22,7 @@ import Quiz from "@/components/Quiz";
 
 ## 1. Understanding ExecutorService
 
-The `ExecutorService` interface is part of the `java.util.concurrent` package, and represents a pool of threads that can be used to execute tasks concurrently. Unlike traditional thread management, `ExecutorService` abstracts away the complexities of thread creation and management, offering a higher-level API for executing tasks asynchronously.
+The `ExecutorService` interface is part of the `java.util.concurrent` package, and represents a pool of threads that can be used to execute tasks concurrently. `ExecutorService` handles thread creation and management through a higher-level API for asynchronous task execution.
 
 ### 1.1 Key Features of ExecutorService
 
@@ -185,7 +185,7 @@ public class CustomThreadPoolExample {
 
 ## 3. Example: Using ExecutorService
 
-Let's consider an example where we need to perform multiple I/O-bound operations concurrently.
+This example runs multiple I/O-bound operations concurrently.
 
 ```java
 import java.util.concurrent.ExecutorService;
@@ -235,7 +235,7 @@ The `Future` interface represents the result of an asynchronous computation. It 
 
 ## 5. Example: Using Future
 
-Let's modify our previous example to use `Future` to handle tasks that return results.
+The next version uses `Future` to handle tasks that return results.
 
 ```java
 import java.util.concurrent.Callable;
@@ -301,8 +301,8 @@ class TaskWithResult implements Callable<Integer> {
 
 ## 7. Conclusion
 
-Concurrency is a cornerstone of modern Java applications, and `ExecutorService` and `Future` are essential tools in a developer's toolkit. By abstracting thread management and providing a robust framework for executing and handling asynchronous tasks, they enable you to build scalable, efficient applications.
+`ExecutorService` handles thread management and task submission. `Future` lets you retrieve results, check task status, and cancel work.
 
-Remember to follow best practices to harness their full potential and avoid common pitfalls. With these tools, you can master concurrency in Java and elevate your applications to new heights of performance and responsiveness.
+Shut down executors when they are no longer needed, handle task exceptions, and use timeouts to avoid waiting indefinitely. Choose the pool size with resource use and performance in mind.
 
 <Quiz slug="java-concurrency" />

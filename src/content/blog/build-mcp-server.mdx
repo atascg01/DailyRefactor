@@ -1,8 +1,8 @@
 import Quiz from "@/components/Quiz";
 
-MCP — the Model Context Protocol — is the closest thing we have to a universal plug for AI applications. Think USB-C, but for connecting LLMs to your tools, data, and workflows.
+MCP, the Model Context Protocol, connects AI applications to tools, data, and workflows through a common interface.
 
-I've been building MCP servers for a few months now, and while the spec is clean, there's a gap between "it works on my machine" and "this belongs in production." Let me walk you through the primitives, show you real code, and then give you the rules that make the difference.
+I've been building MCP servers for a few months now, and while the spec is clean, there's a gap between "it works on my machine" and "this belongs in production." The examples below cover the protocol's primitives and the work needed to prepare a server for production.
 
 ## Table of Contents
 
@@ -43,13 +43,13 @@ One server can expose all three. A GitHub MCP server, for example, might have:
 - **Resources**: `repository://readme`, `repository://contributors`
 - **Prompts**: `review_pr`, `write_release_notes`
 
-Let's break each one down with code.
+Each capability has a different role.
 
 ### 1.1 Tools — model-controlled actions
 
-Tools are the powerhouse. The model decides when to call them, and the server executes. They're defined with JSON Schema inputs and return structured content.
+The model decides when to call tools, and the server executes them. They're defined with JSON Schema inputs and return structured content.
 
-Here's a real tool definition using the TypeScript SDK:
+Here's a tool definition using the TypeScript SDK:
 
 ```typescript
 server.tool(
@@ -74,10 +74,10 @@ server.tool(
 A few things to notice:
 
 - **The description matters.** The model reads it to decide whether to call this tool. Be specific. "Searches documentation" is worse than "Searches internal product documentation using full-text search and returns matching pages with snippets."
-- **Parameter descriptions are just as important.** The `z.string().describe(...)` isn't decoration — it's how the model knows what to pass.
+- **Parameter descriptions are just as important.** The `z.string().describe(...)` tells the model what to pass.
 - **Return `content` as an array.** You can mix text, images, and embedded resources. Plain strings work but the array gives you flexibility.
 
-The wrong tool description will make your server useless because the model won't know when to reach for it. Write them like you're explaining the tool to a new teammate.
+An unclear tool description can leave the model unsure when to use it. Write them like you're explaining the tool to a new teammate.
 
 ### 1.2 Resources — app-controlled data
 
@@ -103,7 +103,7 @@ server.resource(
 );
 ```
 
-Resources can also have templates — dynamic URIs with path parameters:
+Resources can also have templates: dynamic URIs with path parameters.
 
 ```typescript
 server.resource(
@@ -126,7 +126,7 @@ Good uses for resources: database schemas the model should know about, API docum
 
 ### 1.3 Prompts — user-controlled templates
 
-Prompts are pre-built templates the user invokes explicitly. They're not automatic — the user picks them from a list, like choosing "Draft commit message" from a menu.
+Prompts are pre-built templates the user invokes explicitly. The user picks them explicitly from a list, like choosing "Draft commit message" from a menu.
 
 ```typescript
 server.prompt(
@@ -183,7 +183,7 @@ For most personal-use servers, stdio is the right call. For anything shared acro
 
 ## 3. Building a server from scratch
 
-Let's build a practical server — a bookmark manager that lets an AI assistant save, search, and retrieve bookmarks. We'll use TypeScript with the official SDK.
+The example server is a bookmark manager that lets an AI assistant save, search, and retrieve bookmarks. It uses TypeScript with the official SDK.
 
 ### 3.1 Setup
 
@@ -295,13 +295,13 @@ await server.connect(transport);
 
 This is a working server. Run it, register it with Claude Desktop, and you can ask "what did I bookmark about MCP?" or "organize my bookmarks."
 
-But this is a proof of concept. Let's talk about what it takes to make it production-grade.
+This is a proof of concept. A production server needs the validation, error handling, and testing described below.
 
 ## 4. The rules for production MCP servers
 
 ### 4.1 Never write to stdout on stdio servers
 
-This is the most common bug and the hardest to debug. The stdio transport uses stdout for JSON-RPC messages. A stray `console.log` corrupts the protocol and the server silently breaks.
+The stdio transport uses stdout for JSON-RPC messages. A stray `console.log` corrupts the protocol and the server silently breaks.
 
 ```typescript
 // ❌ This will break your server
@@ -344,7 +344,7 @@ Return errors with `isError: true` instead of throwing. The client handles these
 
 ### 4.3 Keep tools focused — one tool, one job
 
-A tool called `manage_project` that creates, updates, deletes, and lists projects is bad. The model has to guess which parameters to pass, and the description becomes a novel.
+A tool called `manage_project` that creates, updates, deletes, and lists projects makes the model guess which parameters to pass and requires a long description.
 
 ```typescript
 // ❌ Too broad
@@ -356,7 +356,7 @@ server.tool("list_projects", "...", {}, ...)
 server.tool("delete_project", "...", { id: z.string() }, ...)
 ```
 
-The model is better at choosing the right tool than at figuring out which parameters to send to a Swiss Army knife.
+Separate tools let the model choose an operation without also selecting among several parameter sets.
 
 ### 4.4 Descriptions are your API
 
@@ -381,7 +381,7 @@ The model understands markdown. Use it:
 ).join("\n\n")}` }
 ```
 
-Tables, lists, and bold text help the model parse your output and present it cleanly to the user. Don't make the model work harder than it has to.
+Tables, lists, and bold text help the model parse your output and present it cleanly to the user.
 
 ### 4.6 Handle the unhappy path
 
@@ -407,7 +407,7 @@ async ({ query }) => {
 }
 ```
 
-Never let an unhandled exception bubble up. The model gets a cryptic error, the user gets confused, and you get a support headache.
+Handle exceptions so the model and user receive a useful error message.
 
 ### 4.7 Mind your secrets
 
@@ -423,7 +423,7 @@ The [MCP Inspector](https://github.com/modelcontextprotocol/inspector) is a brow
 npx @modelcontextprotocol/inspector node dist/server.js
 ```
 
-Test every tool with valid inputs, invalid inputs, and edge cases before connecting it to a real model. The Inspector catches protocol-level issues that `console.error` won't show you.
+Test every tool with valid inputs, invalid inputs, and edge cases before connecting it to a model. The Inspector catches protocol-level issues that `console.error` won't show you.
 
 ### 4.9 Version your server
 
@@ -462,14 +462,14 @@ async def add_bookmark(url: str, title: str, tags: list[str] | None = None) -> s
     return f'Bookmarked: "{title}"'
 ```
 
-FastMCP uses type hints and docstrings for tool definitions — no Zod equivalent needed. The same rules apply: validate inputs, return structured output, log to stderr.
+FastMCP uses type hints and docstrings for tool definitions, without needing a Zod equivalent. The same rules apply: validate inputs, return structured output, log to stderr.
 
 ## 6. Bottom line
 
-MCP servers are less about the protocol and more about good API design. The protocol handles the plumbing. What makes your server useful is clear descriptions, focused tools, and graceful error handling.
+Clear descriptions, focused tools, and useful error responses make an MCP server easier for a model to use. The protocol provides the connection; API design determines how well the tools work through it.
 
-If you take one thing away: write descriptions like you're onboarding a new developer. The model is that developer — it's smart, it can figure things out, but it needs you to tell it what your tools do and when to use them.
+Write descriptions as you would for a new developer: explain what each tool does and when to use it.
 
-The code for the bookmark server is at [github.com/atascg01/mcp-bookmark-server](https://github.com/atascg01/mcp-bookmark-server) — clone it, extend it, break it.
+The code for the bookmark server is at [github.com/atascg01/mcp-bookmark-server](https://github.com/atascg01/mcp-bookmark-server). You can clone it and try extending it.
 
 <Quiz slug="build-mcp-server" />

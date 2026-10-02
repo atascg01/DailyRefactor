@@ -1,10 +1,10 @@
 import Quiz from "@/components/Quiz";
 
-Picture this: you're building a payment service. A customer's wallet has 100 EUR. Two purchase requests hit your server at the exact same moment — each trying to debit 80 EUR. If your code isn't thread-safe, both requests see 100 EUR, both think "80 ≤ 100, approved!", and the customer gets 160 EUR of value for 100 EUR in their account. Somebody just got two iPads for the price of one, and your finance team just got a headache.
+Consider a payment service. A customer's wallet has 100 EUR. Two purchase requests hit your server at the exact same moment, each trying to debit 80 EUR. If your code isn't thread-safe, both requests see 100 EUR, both think "80 ≤ 100, approved!", and the customer gets 160 EUR of value for 100 EUR in their account. The service has approved more spending than the balance allows.
 
-This isn't a theoretical edge case. In backend systems — especially fintech, e-commerce, or anything with shared user balances — concurrent requests are the default, not the exception. Every production service handles multiple requests at once, whether through thread pools in a servlet container, async event loops, or horizontally scaled instances hitting the same database.
+This isn't a theoretical edge case. In backend systems, especially fintech, e-commerce, or anything with shared user balances, concurrent requests are the default, not the exception. Every production service handles multiple requests at once, whether through thread pools in a servlet container, async event loops, or horizontally scaled instances hitting the same database.
 
-And here's the thing most tutorials skip: _using threads doesn't mean you're thread-safe_. Spinning up an `ExecutorService` and firing off tasks is easy. Making sure those tasks don't corrupt shared data is the hard part. This article walks through the hard part.
+The distinction is that _using threads doesn't mean you're thread-safe_. Spinning up an `ExecutorService` and firing off tasks is easy. Making sure those tasks don't corrupt shared data is the hard part. The examples below show how to protect that shared data.
 
 ## Table of Contents
 
@@ -25,9 +25,9 @@ And here's the thing most tutorials skip: _using threads doesn't mean you're thr
 
 A piece of code is **thread-safe** if it behaves correctly when accessed by multiple threads at the same time, without any additional synchronization on the caller's side.
 
-That's it. No magical definition. If two threads can call your method simultaneously and the invariants hold — balances don't go negative, counters don't skip values, collections don't get corrupted — your code is thread-safe.
+If two threads can call your method simultaneously and the invariants hold (balances don't go negative, counters don't skip values, collections don't get corrupted), your code is thread-safe.
 
-The culprit is almost always **shared mutable state**. When multiple threads can read and write the same data without coordination, you have a problem. Local variables (primitives, references to objects only reachable from the current stack frame) are inherently safe because each thread has its own stack. Instance fields and static fields? Those are the danger zone.
+The culprit is almost always **shared mutable state**. When multiple threads can read and write the same data without coordination, you have a problem. Local variables (primitives, references to objects only reachable from the current stack frame) are inherently safe because each thread has its own stack. Instance fields and static fields can be shared between threads.
 
 ```java
 // This class is NOT thread-safe if shared across threads
@@ -97,11 +97,11 @@ if (balance >= amount) {    // Thread-1 reads 100
 }
 ```
 
-The check and the deduction are a compound operation that needs to be atomic. Without synchronization, the balance ends up at -60 EUR. The bank is not going to be happy.
+The check and the deduction are a compound operation that needs to be atomic. Without synchronization, the balance ends up at -60 EUR.
 
 ## 3. Shared Mutable State
 
-Why is shared mutable state so dangerous? Because it creates **interference**: one thread's writes can be invisible to another thread, either because of CPU caching or because the writes get stomped by interleaved operations.
+Shared mutable state creates **interference**: one thread's writes can be invisible to another thread, either because of CPU caching or because the writes get stomped by interleaved operations.
 
 Consider this innocent-looking class:
 
@@ -126,7 +126,7 @@ public class UserSession {
 
 If two requests share the same `UserSession` instance (say it's stored in a `ConcurrentHashMap` keyed by session token), `login()` and `hasPermission()` can interleave. Thread-1 calls `login("alice")` while Thread-2 calls `hasPermission("admin")`. Thread-2 might see a half-constructed state: `userId` is "alice" but `permissions` still belongs to the previous user.
 
-The key insight: **local variables are safe, instance/static fields are not**. Each thread has its own stack, so:
+**Local variables are safe, instance/static fields are not**. Each thread has its own stack, so:
 
 ```java
 public void safeMethod() {
@@ -136,11 +136,11 @@ public void safeMethod() {
 }
 ```
 
-But as soon as you store a reference where other threads can reach it — an instance field, a static field, or a shared collection — all bets are off.
+But as soon as you store a reference where other threads can reach it, such as an instance field, a static field, or a shared collection, you need to coordinate access.
 
 ## 4. Fix 1: Avoid Sharing State
 
-The single best thread-safety technique isn't a keyword or a library. It's a design choice: **don't share mutable state in the first place**.
+Avoid sharing mutable state where you can. This design choice removes the need to synchronize access to that state.
 
 If an object is immutable, it's automatically thread-safe. No thread can change it after construction, so there's nothing to synchronize:
 
@@ -170,7 +170,7 @@ This pattern extends beyond data objects. Instead of sharing a mutable cache, pu
 
 ## 5. Fix 2: `synchronized`
 
-When you can't avoid sharing mutable state, `synchronized` is your first line of defense. It creates a **critical section** — a block of code that only one thread can execute at a time for a given lock object.
+When you can't avoid sharing mutable state, `synchronized` is your first line of defense. It creates a **critical section**, a block of code that only one thread can execute at a time for a given lock object.
 
 Here's a thread-safe wallet using `synchronized`:
 
@@ -215,7 +215,7 @@ Use `synchronized` for the critical sections that actually need it, not as a bla
 
 Think of it as telling the JVM: "don't cache this value in CPU registers; always read from and write to main memory."
 
-Safe use — a shutdown flag:
+Safe use: a shutdown flag.
 
 ```java
 public class Worker implements Runnable {
@@ -236,7 +236,7 @@ public class Worker implements Runnable {
 
 Without `volatile`, the worker thread might cache `running = true` forever and never see the stop signal.
 
-Unsafe use — a counter:
+Unsafe use: a counter.
 
 ```java
 private volatile int counter = 0;
@@ -252,13 +252,13 @@ private volatile int counter = 0;
 
 Volatile makes sure you always see the latest value, but it doesn't prevent two threads from reading the same value before either writes. For atomic compound operations, you need `synchronized` or atomics.
 
-**Quick rule:** use `volatile` when one thread writes and others read — and the write doesn't depend on the current value. Use `synchronized` or atomics when you need read-modify-write to be atomic.
+**Quick rule:** use `volatile` when one thread writes and others read, and the write doesn't depend on the current value. Use `synchronized` or atomics when you need read-modify-write to be atomic.
 
 ## 7. Fix 4: Atomic Classes
 
 `java.util.concurrent.atomic` provides lock-free, thread-safe wrappers for single variables: `AtomicInteger`, `AtomicLong`, `AtomicBoolean`, `AtomicReference<V>`.
 
-They use **compare-and-swap (CAS)** — a hardware-level instruction that atomically checks if a value equals an expected value and, if so, swaps it with a new value. No locks, no blocking.
+They use **compare-and-swap (CAS)**, a hardware-level instruction that atomically checks if a value equals an expected value and, if so, swaps it with a new value. No locks, no blocking.
 
 ```java
 import java.util.concurrent.atomic.AtomicInteger;
@@ -301,14 +301,14 @@ public boolean debit(int amount) {
 }
 ```
 
-`compareAndSet` checks that the value hasn't changed since we read it, which helps — but in a complex business invariant like "balance must never go below zero AND must deduct the full amount," a single CAS isn't enough. You'd need a retry loop, and even then, for invariants spanning multiple variables or collections, atomics aren't the right tool. That's where `synchronized` or database-level locking comes back into the picture.
+`compareAndSet` checks that the value hasn't changed since we read it, which helps, but in a complex business invariant like "balance must never go below zero AND must deduct the full amount," a single CAS isn't enough. You'd need a retry loop, and even then, for invariants spanning multiple variables or collections, atomics aren't the right tool. That's where `synchronized` or database-level locking comes back into the picture.
 
 **Use atomics when:** you need thread-safe operations on a single variable and the operation is simple (increment, decrement, compare-and-set).
 **Use `synchronized` when:** the invariant spans multiple variables or requires compound checks.
 
 ## 8. Fix 5: Concurrent Collections
 
-Everybody knows `HashMap` isn't thread-safe. What fewer people know is that even `Collections.synchronizedMap()` wraps every method with `synchronized`, so compound operations are still unsafe:
+`HashMap` isn't thread-safe. Even `Collections.synchronizedMap()` wraps every method with `synchronized`, so compound operations are still unsafe:
 
 ```java
 Map<String, Integer> syncMap = Collections.synchronizedMap(new HashMap<>());
@@ -332,7 +332,7 @@ map.computeIfAbsent("key", k -> expensiveComputation(k));
 map.compute("key", (k, v) -> (v == null) ? 1 : v + 1);
 ```
 
-`ConcurrentHashMap` uses lock striping internally — different segments of the map can be locked independently — so it scales much better under contention than a fully synchronized map.
+`ConcurrentHashMap` uses lock striping internally: different segments of the map can be locked independently, so it scales much better under contention than a fully synchronized map.
 
 **But be careful:** concurrent collections protect the collection's internal state, not your business logic. This still has a race condition:
 
@@ -346,11 +346,11 @@ public boolean debit(String walletId, int amount) {
 }
 ```
 
-`ConcurrentHashMap.get()` is thread-safe. The `Wallet.debit()` method also needs to be thread-safe — either through `synchronized` or `AtomicInteger`. The concurrent collection is just one piece of the puzzle.
+`ConcurrentHashMap.get()` is thread-safe. The `Wallet.debit()` method also needs to be thread-safe, either through `synchronized` or `AtomicInteger`. The collection does not protect mutations to the wallet.
 
 ## 9. Wallet Example: Preventing Negative Balance
 
-Let's bring it all together. Here's the full evolution of our wallet, from unsafe to production-ready.
+The wallet example starts with an unsafe in-memory version, adds synchronization, then addresses database access across JVMs.
 
 **Step 1: The naive, unsafe version**
 
@@ -396,9 +396,9 @@ public class SafeWallet {
 
 Now only one thread executes `debit()` at a time on this wallet instance. The balance stays correct. This works perfectly for an in-memory application.
 
-**Step 3: Enter the database — where thread safety meets ACID**
+**Step 3: Protect the database with transactions and locking**
 
-In a real backend, the wallet balance lives in PostgreSQL, not in JVM memory. Your application might have multiple instances behind a load balancer, all hitting the same database. `synchronized` in Java protects in-process concurrency; it does nothing when two separate JVMs each run `debit()` on the same database row.
+In a database-backed service, the wallet balance lives in PostgreSQL, not in JVM memory. Your application might have multiple instances behind a load balancer, all hitting the same database. `synchronized` in Java protects in-process concurrency; it does nothing when two separate JVMs each run `debit()` on the same database row.
 
 Here's what happens without database-level protection:
 
@@ -474,11 +474,11 @@ Code is thread-safe if it behaves correctly when accessed concurrently by multip
 
 **What is a race condition?**
 
-A race condition happens when program correctness depends on the timing or ordering of thread execution. The code produces correct results for some interleavings and incorrect results for others — and you can't control which interleaving you get at runtime.
+A race condition happens when program correctness depends on the timing or ordering of thread execution. The code produces correct results for some interleavings and incorrect results for others, and you can't control which interleaving you get at runtime.
 
 **What is the difference between `synchronized` and `volatile`?**
 
-`synchronized` provides mutual exclusion (only one thread executes the block at a time) AND visibility (all writes before exiting the block are visible to the next thread entering). `volatile` only guarantees visibility — writes to a volatile variable are immediately visible to all threads, but it doesn't prevent two threads from executing the same block simultaneously. `volatile` is cheaper but less powerful.
+`synchronized` provides mutual exclusion (only one thread executes the block at a time) AND visibility (all writes before exiting the block are visible to the next thread entering). `volatile` only guarantees visibility: writes to a volatile variable are immediately visible to all threads, but it doesn't prevent two threads from executing the same block simultaneously. `volatile` is cheaper but less powerful.
 
 **Why is `counter++` not thread-safe?**
 
@@ -486,7 +486,7 @@ Because it's a compound operation: read the current value, increment it, write t
 
 **When would you use `AtomicInteger`?**
 
-When you need lock-free, thread-safe operations on a single integer — typically counters, sequence generators, or flags that require `compareAndSet`. Atomics are faster than `synchronized` for simple single-variable operations because they use hardware-level CAS instead of OS-level locking.
+When you need lock-free, thread-safe operations on a single integer, typically counters, sequence generators, or flags that require `compareAndSet`. Atomics are faster than `synchronized` for simple single-variable operations because they use hardware-level CAS instead of OS-level locking.
 
 **Is `ConcurrentHashMap` enough to make business logic thread-safe?**
 
@@ -498,13 +498,13 @@ In a single-JVM application: use `synchronized` on the wallet object or an `Atom
 
 ## 12. Conclusion
 
-Thread safety boils down to one idea: **control access to shared mutable state**.
+Thread safety requires controlling access to shared mutable state.
 
-Design is your first and best tool. If you can avoid sharing state — through immutability, thread-confined objects, or message-passing architectures — you eliminate entire categories of bugs. No shared state means no synchronization means no deadlocks.
+Design is your first and best tool. If you can avoid sharing state through immutability, thread-confined objects, or message-passing architectures, you eliminate entire categories of bugs. No shared state means no synchronization means no deadlocks.
 
-When you can't avoid sharing, reach for the right tool for the job: `synchronized` for compound invariants, `volatile` for simple visibility, atomics for lock-free single-variable operations, and concurrent collections for thread-safe data structures. Know what each tool guarantees — and what it doesn't.
+When you can't avoid sharing, reach for the right tool for the job: `synchronized` for compound invariants, `volatile` for simple visibility, atomics for lock-free single-variable operations, and concurrent collections for thread-safe data structures. Know what each tool guarantees and where you need additional protection.
 
-And in real backend systems, remember that Java thread safety is only half the story. Your database is shared mutable state too. Protect it with transactions, locking, and careful schema design. The best wallet implementation in Java means nothing if two application instances both `SELECT ... WHERE balance >= 80` at the same time.
+In backend systems, Java thread safety also needs to be considered alongside database consistency. Your database is shared mutable state too. Protect it with transactions, locking, and careful schema design. The best wallet implementation in Java means nothing if two application instances both `SELECT ... WHERE balance >= 80` at the same time.
 
-Thread safety isn't something you add at the end. It's something you design from the start — or pay for later in production incidents at 3 AM.
+Design for thread safety from the start to avoid concurrency failures in production.
 <Quiz slug="thread-safety-java" />

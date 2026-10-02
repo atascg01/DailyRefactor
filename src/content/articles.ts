@@ -17,6 +17,23 @@ export interface ArticleMeta {
 
 export const articles: ArticleMeta[] = [
   {
+    id: 13,
+    slug: "jev-reasoning-effort",
+    title: "My Jev Experiment: Choosing Effort for Codex and Claude Code",
+    excerpt:
+      "A reproducible Jev effort recommendation, the commands to apply it in Codex and Claude Code, and the cache and cost tradeoffs I still need to measure.",
+    category: "AI",
+    image: "/images/jev-reasoning-effort.svg",
+    date: "October 1, 2026",
+    updatedAt: "October 2, 2026",
+    readTime: "12 min read",
+    author: {
+      name: "Andres Tascon",
+      avatar: "/images/pic_photo.jpg",
+      role: "Senior Software Engineer @ Oracle",
+    },
+  },
+  {
     id: 12,
     slug: "testing-java-backends",
     title: "Testing Java Backends: Unit, Integration, and Contract Tests",

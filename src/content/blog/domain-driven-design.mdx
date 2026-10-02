@@ -1,6 +1,6 @@
 import Quiz from "@/components/Quiz";
 
-Domain-Driven Design sounds like one of those enterprise buzzwords that consultants use to sell you a $50,000 workshop. But strip away the jargon and DDD is just a set of practical ideas for modeling complex business logic in code — ideas that developers independently rediscover after years of maintaining "anemic" CRUD apps that turn into spaghetti.
+Domain-Driven Design is a set of practical ideas for modeling complex business logic in code. Developers often encounter these problems while maintaining "anemic" CRUD apps that turn into spaghetti.
 
 Here's the problem DDD solves: most line-of-business applications start simple. A few REST endpoints, a database table, some validation. Six months later you have 47 `if` statements scattered across controllers, services, and "utils" classes, each encoding some implicit business rule nobody fully understands anymore. The domain expert explains how refunds should work and you realize your code models something completely different.
 
@@ -44,11 +44,11 @@ You write this:
 order.fulfill(payment);
 ```
 
-That's the _ubiquitous language_ — the same words used by domain experts show up in your code. If the warehouse manager says "we fulfill orders after payment clears," your code literally says `order.fulfill(payment)`.
+That's the _ubiquitous language_: the same words used by domain experts show up in your code. If the warehouse manager says "we fulfill orders after payment clears," your code literally says `order.fulfill(payment)`.
 
 ### When DDD makes sense
 
-DDD is not a silver bullet. It has a specific sweet spot:
+DDD fits some kinds of work better than others:
 
 **✅ Use DDD when:**
 - The business domain is complex and changes frequently
@@ -59,18 +59,18 @@ DDD is not a silver bullet. It has a specific sweet spot:
 **❌ Skip DDD when:**
 - You're building a thin CRUD wrapper around a database (just use Spring Data REST)
 - The complexity is purely technical (data pipelines, API gateways, infrastructure tools)
-- The domain is well-understood with off-the-shelf solutions (accounting, payroll — use existing software)
+- The domain is well-understood with off-the-shelf solutions (accounting, payroll; use existing software)
 - You're a two-person startup building an MVP that might pivot next month
 
 The key heuristic: _if your biggest challenge is understanding the business rules, use DDD. If your biggest challenge is technical plumbing, use something simpler._
 
 ## 2. The building blocks
 
-DDD provides a vocabulary of patterns. Here are the ones you'll use every day, with real Java code.
+DDD provides patterns for identity, values, consistency boundaries, and business rules. The Java examples below show how they fit together.
 
 ### 2.1 Entities — things with identity
 
-An Entity is an object defined by its _identity_, not by its attributes. Two customers with the same name and address are still different customers — identity is what matters.
+An Entity is an object defined by its _identity_, not by its attributes. Two customers with the same name and address are still different customers because their identities differ.
 
 An Entity must:
 - Have a stable, unique identifier
@@ -127,7 +127,7 @@ public class Customer {
 
 A few things to notice:
 
-1. **No setters.** Methods have meaningful names that express business intent — `changeEmail`, `suspend`. Not `setEmail`, `setStatus`.
+1. **No setters.** Methods have meaningful names that express business intent, such as `changeEmail` and `suspend`, instead of `setEmail` and `setStatus`.
 2. **Constructor enforces valid state.** You can't create a customer without an ID, name, and email. The object is valid from birth.
 3. **equals/hashCode use only the ID.** Even if every other field changes, it's still the same customer.
 
@@ -147,7 +147,7 @@ public record CustomerId(UUID value) {
 
 ### 2.2 Value Objects — things defined by their attributes
 
-A Value Object has no identity. Two value objects with the same fields are interchangeable — like two $10 bills. They are immutable and compared by their values.
+A Value Object has no identity. Two value objects with the same fields are interchangeable, like two $10 bills. They are immutable and compared by their values.
 
 ```java
 public record Money(BigDecimal amount, Currency currency) {
@@ -195,7 +195,7 @@ public record Money(BigDecimal amount, Currency currency) {
 }
 ```
 
-Java records are perfect for Value Objects — they're immutable by default and implement `equals`/`hashCode` based on all fields. Notice how `Money` isn't just a data bag: it has behavior. Adding money means calling `add()`, not reaching into two doubles and doing arithmetic in a service class.
+Java records suit Value Objects because they're immutable by default and implement `equals`/`hashCode` based on all fields. Notice how `Money` isn't just a data bag: it has behavior. Adding money means calling `add()`, not reaching into two doubles and doing arithmetic in a service class.
 
 More value objects for our domain:
 
@@ -241,9 +241,9 @@ public record Address(
 
 ### 2.3 Aggregates — consistency boundaries
 
-An Aggregate is a cluster of Entities and Value Objects treated as a single unit. Every aggregate has a _root_ — the only object external code can reference directly. All changes to objects inside the aggregate go through the root.
+An Aggregate is a cluster of Entities and Value Objects treated as a single unit. Every aggregate has a _root_, the only object external code can reference directly. All changes to objects inside the aggregate go through the root.
 
-Why? Because business invariants need a boundary. "An order's total must equal the sum of its line items' totals" — this rule can only be enforced if all line items are modified through the order.
+Business invariants need a boundary. "An order's total must equal the sum of its line items' totals" can only be enforced if all line items are modified through the order.
 
 ```java
 public class Order {
@@ -332,8 +332,8 @@ public class Order {
 
 Key design decisions in this aggregate:
 
-1. **`lines` is private — no external code adds lines directly.** All mutations go through `addLine()`/`removeLine()`, which enforce the "only modify draft orders" invariant.
-2. **`total` is recalculated on every mutation.** There is no `setTotal()` — it's derived. An invariant ("total equals sum of line totals") is enforced, not hoped for.
+1. `lines` is private, so external code cannot add lines directly. All mutations go through `addLine()`/`removeLine()`, which enforce the "only modify draft orders" invariant.
+2. **`total` is recalculated on every mutation.** `total` is derived without a `setTotal()` method. An invariant ("total equals sum of line totals") is enforced, not hoped for.
 3. **`getLines()` returns a defensive copy.** Exposing the internal list would let callers bypass the root.
 4. **State transitions are explicit methods.** `place()` and `markAsShipped()` encode the order lifecycle. No `setStatus()`.
 
@@ -381,11 +381,11 @@ Every invariant check happens _at the point of mutation_, inside the domain obje
 
 ## 3. A feature end-to-end: placing an order
 
-Let's wire up everything we've built into a real feature. We'll implement "place an order" through every layer: Domain → Application → Infrastructure → API.
+The next example combines these objects to implement "place an order" through every layer: Domain → Application → Infrastructure → API.
 
 ### 3.1 The Domain layer
 
-The domain layer contains our entities, value objects, and interfaces (ports) — with zero framework dependencies.
+The domain layer contains our entities, value objects, and interfaces (ports), with zero framework dependencies.
 
 ```java
 // --- Domain: Order.java (aggregate root, shown above) ---
@@ -420,11 +420,11 @@ public class OrderPlacementService {
 }
 ```
 
-Notice: `OrderRepository` and `CustomerRepository` are _interfaces_ in the domain layer. The domain defines the contract (what it needs), not the implementation (how it works). This is the "Ports and Adapters" pattern — the domain owns the ports.
+Notice: `OrderRepository` and `CustomerRepository` are _interfaces_ in the domain layer. The domain defines the contract (what it needs), not the implementation (how it works). This is the "Ports and Adapters" pattern: the domain owns the ports.
 
 ### 3.2 The Application layer
 
-The application layer orchestrates use cases. It doesn't contain business rules — it wires domain objects together and manages transactions.
+The application layer orchestrates use cases. It wires domain objects together and manages transactions, while business rules live in the domain.
 
 ```java
 // --- Application: Use case ---
@@ -463,7 +463,7 @@ public class PlaceOrderUseCase {
 public record PlaceOrderCommand(OrderId orderId, CustomerId customerId) {}
 ```
 
-The application layer is thin by design. Its job: load aggregates, delegate to domain, save. No business logic — that lives in the domain.
+The application layer loads aggregates, delegates to the domain, and saves the result. Business logic lives in the domain.
 
 ### 3.3 The Infrastructure layer
 
@@ -641,11 +641,11 @@ void cannotPlaceEmptyOrder() {
 }
 ```
 
-No Spring context. No database. No HTTP. Just the domain.
+These tests exercise the domain without a Spring context, database, or HTTP calls.
 
 ## 5. Common mistakes and when to avoid DDD
 
-**Mistake 1: Anemic domain model.** Your entities have getters/setters and zero behavior. All business logic lives in "services." This isn't DDD — it's procedural code with fancy class names. If your `Order` class is just a bag of fields and `OrderService` has the `place()` method, you've fallen into the most common trap.
+**Mistake 1: Anemic domain model.** Your entities have getters/setters and zero behavior. All business logic lives in "services." This leaves the code procedural despite the domain class names. If your `Order` class is just a bag of fields and `OrderService` has the `place()` method, you've fallen into the most common trap.
 
 **Mistake 2: Over-engineering.** Every `String` becomes a value object. Every entity gets a repository. You spend two days modeling a `PhoneNumber` type when the business just needs to display it. DDD is for _complex_ domains. If all you do is validate a phone number format, a simple `@Pattern` annotation is fine.
 
@@ -661,9 +661,9 @@ No Spring context. No database. No HTTP. Just the domain.
 
 ## 6. Bottom line
 
-DDD isn't about the patterns — it's about the mindset. The patterns (Entities, Value Objects, Aggregates) are tools; the mindset is: _the business problem drives the code structure, not the framework._
+Entities, Value Objects, and Aggregates support the same design principle: _the business problem drives the code structure, not the framework._
 
 Start small. Pick one aggregate in your existing codebase where the business rules are scattered across ten service classes. Extract those rules into the aggregate root. Give methods meaningful names from your domain expert's vocabulary. See if the code gets easier to change.
 
-If it does, you've understood DDD. If it doesn't, the domain might not be complex enough to need it — and that's fine too. The best architecture is the one you don't fight.
+If the code becomes easier to change, the model is helping. If it doesn't, the domain might not be complex enough to need DDD.
 <Quiz slug="domain-driven-design" />

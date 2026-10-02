@@ -2,9 +2,9 @@ import Quiz from "@/components/Quiz";
 
 <p>You've written a money transfer service. The code compiles, the PR is up, and you're confident it works. Then a colleague asks: "What happens if the database goes down between the debit and the credit?" Or: "What if two requests hit the same wallet at the exact same time?" If your answer starts with "well, probably..." instead of "here's the test that proves it," you've got a testing strategy problem.</p>
 
-<p>Writing unit tests is easy. Designing a testing strategy that gives you real confidence — one that catches concurrency bugs, transaction failures, contract breaks, and edge cases before they hit production — that's a different skill entirely. It's also exactly the kind of thing that comes up in senior engineering interviews.</p>
+<p>A testing strategy needs to cover concurrency bugs, transaction failures, contract breaks, and edge cases as well as isolated logic. Choosing the right test for each risk is also a common topic in senior engineering interviews.</p>
 
-<p>This article is a practical guide to testing Java backends, from unit tests with JUnit and Mockito all the way through integration tests with Testcontainers, contract tests for microservices, and concurrency tests that actually catch race conditions. We'll use a fintech wallet as our running example — because if you can test a money transfer, you can test anything.</p>
+<p>The examples use a fintech wallet to show unit tests with JUnit and Mockito, integration tests with Testcontainers, contract tests, and concurrency tests. A transfer combines business rules with database behavior and failures, so it needs coverage at several levels.</p>
 
 ## Table of Contents
 
@@ -27,7 +27,7 @@ import Quiz from "@/components/Quiz";
 
 ## 1. What Is a Testing Strategy?
 
-A testing strategy is a set of intentional decisions about what to test, at which level, with which tools, and — crucially — what *not* to test at a given level. It's not a list of test files. It's the answer to: "If I change this code, how do I know I haven't broken anything?"
+A testing strategy is a set of intentional decisions about what to test, at which level, with which tools, and what *not* to test at a given level. It's not a list of test files. It's the answer to: "If I change this code, how do I know I haven't broken anything?"
 
 Different tests answer different questions:
 
@@ -36,7 +36,7 @@ Different tests answer different questions:
 - **Contract tests** ask: *Do consumer and provider agree on the API shape?*
 - **End-to-end tests** ask: *Does the whole system do what the user expects?*
 
-The mistake most teams make is trying to answer all these questions at the same level — usually unit tests, with a thick layer of mocking that masks real integration problems. Or they go the other direction and write E2E tests for every edge case, ending up with a test suite that takes 45 minutes and fails for unrelated reasons half the time.
+The mistake most teams make is trying to answer all these questions at the same level, usually unit tests, with a thick layer of mocking that masks real integration problems. Or they go the other direction and write E2E tests for every edge case, ending up with a test suite that takes 45 minutes and fails for unrelated reasons half the time.
 
 A good strategy distributes confidence across levels. Unit tests catch logic errors fast. Integration tests prove the database queries work. Contract tests prevent teams from accidentally breaking each other. E2E tests verify that the most critical user journeys survive everything else.
 
@@ -52,7 +52,7 @@ public void debit(WalletId walletId, Money amount) {
 }
 ```
 
-You can unit-test `Wallet.debit()` all day — checking insufficient funds, currency mismatches, zero amounts. But none of those tests answer: does the SQL query actually lock the row? Does the transaction roll back if the save fails? Does the optimistic locking version check work? Those questions live at a different level of the pyramid, and they require a different kind of test.
+You can unit-test `Wallet.debit()` repeatedly, checking insufficient funds, currency mismatches, zero amounts. But none of those tests answer: does the SQL query actually lock the row? Does the transaction roll back if the save fails? Does the optimistic locking version check work? Those questions live at a different level of the pyramid, and they require a different kind of test.
 
 ## 2. The Testing Pyramid
 
@@ -184,7 +184,7 @@ class WalletTest {
 }
 ```
 
-These tests are pure domain logic — no database, no HTTP, no Spring context. They run in under a millisecond and tell you exactly what the `Wallet` class promises. Domain logic, value objects, and pure functions are the best candidates for unit tests because they have clear inputs, clear outputs, and no side effects.
+These tests are pure domain logic without a database, HTTP calls, or a Spring context. They run in under a millisecond and tell you exactly what the `Wallet` class promises. Domain logic, value objects, and pure functions are the best candidates for unit tests because they have clear inputs, clear outputs, and no side effects.
 
 ### What Makes a Good Unit Test?
 
@@ -206,11 +206,11 @@ void shouldDebitSuccessfullyWhenBalanceIsSufficient() {
 
 Name your tests for the behavior, not the method. `testDebit` tells you nothing. `shouldThrowWhenInsufficientFunds` tells you what to expect and under what conditions.
 
-Test one thing per test. If a test has five assertions on unrelated concerns, it's doing too much — and when it fails, you'll spend time figuring out which of the five things broke.
+Test one thing per test. If a test has five assertions on unrelated concerns, it's doing too much. When it fails, you'll spend time figuring out which of the five things broke.
 
 ## 4. What Should You Mock?
 
-Mocking is powerful but easy to misuse. The rule of thumb: mock at architectural boundaries, not internal ones.
+The rule of thumb for mocking is: mock at architectural boundaries, not internal ones.
 
 ### Good Candidates for Mocking
 
@@ -260,7 +260,7 @@ These often cause more harm than good when mocked:
 
 ### The Cost of Over-Mocking
 
-Over-mocked tests look impressive in coverage reports but provide false confidence. They test that your mocks behave exactly as you configured them to behave — which tells you nothing about whether the real implementations actually work together.
+Over-mocked tests look impressive in coverage reports but provide false confidence. They test that your mocks behave exactly as you configured them to behave, which tells you nothing about whether the real implementations actually work together.
 
 ```java
 // This test passes. It also tells you nothing useful.
@@ -283,7 +283,7 @@ A good heuristic: if your test has more `when(...)` lines than assertions, you m
 
 ## 5. Testing With Dependency Injection
 
-Dependency Injection is one of the most valuable testing tools in Java. Constructor injection in particular makes unit testing trivial — you pass dependencies through the constructor, and tests pass fakes or mocks instead of real infrastructure.
+Constructor injection lets tests pass fakes or mocks through the constructor instead of using real infrastructure.
 
 ```java
 public class TransferService {
@@ -349,7 +349,7 @@ void shouldCompleteTransferWhenFraudCheckPasses() {
 }
 ```
 
-This test uses an in-memory repository for fast, deterministic setup and a mock for the notification sender (to verify it was called). No Spring, no database, no network — but we've verified the core orchestration logic of the transfer.
+This test uses an in-memory repository for fast, deterministic setup and a mock for the notification sender (to verify it was called). The test verifies the transfer's core orchestration without Spring, a database, or network calls.
 
 ### Why Constructor Injection?
 
@@ -361,9 +361,9 @@ Constructor injection has three advantages for testing:
 
 ## 6. Integration Tests
 
-An integration test verifies that your code works with real infrastructure — a real database, a real message broker, a real filesystem. It answers the question: "Does my SQL query actually return what I think it returns?"
+An integration test verifies that your code works with real infrastructure, such as a database, message broker, or filesystem. It answers the question: "Does my SQL query actually return what I think it returns?"
 
-The simplest and most reliable way to run integration tests in Java is with **Testcontainers**. It spins up real PostgreSQL (or MySQL, Kafka, Redis, whatever) in a Docker container for the duration of your tests.
+**Testcontainers** runs integration tests against real infrastructure. It spins up real PostgreSQL (or MySQL, Kafka, Redis, whatever) in a Docker container for the duration of your tests.
 
 ```java
 import org.testcontainers.containers.PostgreSQLContainer;
@@ -431,7 +431,7 @@ Integration tests are slower than unit tests. A typical integration test takes 1
 
 Transactions are where many backend bugs hide. The code works perfectly in development; it only breaks when two things happen at the same time, or when one thing fails halfway through.
 
-ACID properties (Atomicity, Consistency, Isolation, Durability) are guarantees databases provide — but only if your code uses them correctly. Tests should verify that your code actually delivers on those guarantees.
+ACID properties (Atomicity, Consistency, Isolation, Durability) are guarantees databases provide, but only if your code uses them correctly. Tests should verify that your code actually delivers on those guarantees.
 
 ### Testing Atomicity: Rollback on Failure
 
@@ -535,7 +535,7 @@ void shouldNotProcessDuplicateTransfer() {
 
 ## 8. Testing Concurrency
 
-Concurrency bugs are the hardest to reproduce, the hardest to debug, and among the most dangerous in financial systems. A wallet with 100 EUR should never allow two simultaneous debits of 80 EUR to both succeed — that would create money out of thin air.
+Concurrency bugs can be difficult to reproduce and debug, especially when they affect financial data. A wallet with 100 EUR should never allow two simultaneous debits of 80 EUR to both succeed, since that would approve debits exceeding the balance.
 
 ```java
 @Test
@@ -587,7 +587,7 @@ A few things to note about this test:
 
 ### A Word of Caution
 
-Concurrency tests can be flaky. If the thread scheduler happens to serialize the two requests (one completes fully before the other starts), this test passes even without proper locking. That's a *false positive* — the test says "OK" but the code has a race condition.
+Concurrency tests can be flaky. If the thread scheduler happens to serialize the two requests (one completes fully before the other starts), this test passes even without proper locking. That's a *false positive*: the test says "OK" but the code has a race condition.
 
 To mitigate this:
 
@@ -613,7 +613,7 @@ void pessimisticLockShouldPreventConcurrentDebit() {
 
 ## 9. Contract Tests
 
-Contract tests verify that the interface between two systems — whether it's a REST API, a gRPC service, or a message schema — matches what both sides expect. They don't test behavior or internal logic. They test *compatibility*.
+Contract tests verify that the interface between two systems, whether it's a REST API, a gRPC service, or a message schema, matches what both sides expect. They don't test behavior or internal logic. They test *compatibility*.
 
 ### REST API Contracts
 
@@ -690,7 +690,7 @@ If your services communicate via events (Kafka, RabbitMQ), the event schema is y
 }
 ```
 
-A test that serializes a `PaymentCaptured` event and validates it against the schema prevents accidental breaking changes — like renaming `capturedAt` to `timestamp` without updating downstream consumers.
+A test that serializes a `PaymentCaptured` event and validates it against the schema prevents accidental breaking changes, such as renaming `capturedAt` to `timestamp` without updating downstream consumers.
 
 ### Why Contract Tests Matter
 
@@ -759,11 +759,11 @@ API tests should verify the things that matter at the HTTP boundary:
 - **Auth boundaries** — are protected endpoints actually protected?
 - **JSON serialization** — are fields named correctly in the response?
 
-Don't duplicate every unit test here. The API test doesn't need to verify that insufficient funds throws an exception — the unit test covers that. The API test verifies that the exception produces the right HTTP response.
+Don't duplicate every unit test here. The API test doesn't need to verify that insufficient funds throws an exception; the unit test covers that. The API test verifies that the exception produces the right HTTP response.
 
 ## 11. End-to-End Tests
 
-End-to-end tests verify complete user journeys through the entire system — real HTTP calls, real database, real (or simulated) external services. They're the closest thing to what your users actually experience.
+End-to-end tests verify complete user journeys through the entire system, using real HTTP calls, a real database, and real (or simulated) external services. They're the closest thing to what your users actually experience.
 
 A payment flow E2E test might look like:
 
@@ -813,9 +813,9 @@ class PaymentFlowE2ETest {
 
 ### Why E2E Tests Are Expensive
 
-E2E tests are slow (30+ seconds each), require full infrastructure, and are susceptible to environmental flakiness — network glitches, container startup races, test data collisions. When an E2E test fails, you often spend more time diagnosing *why* it failed than understanding *what* code broke.
+E2E tests are slow (30+ seconds each), require full infrastructure, and are susceptible to environmental flakiness, including network glitches, container startup races, and test data collisions. When an E2E test fails, you often spend more time diagnosing *why* it failed than understanding *what* code broke.
 
-Because of this cost, E2E tests should cover only your most critical user journeys — the flows where failure means lost money, regulatory problems, or severe user impact. For everything else, push coverage down the pyramid to faster, more reliable test levels.
+Because of this cost, E2E tests should cover only your most critical user journeys, the flows where failure means lost money, regulatory problems, or severe user impact. For everything else, push coverage down the pyramid to faster, more reliable test levels.
 
 ## 12. Testing Error Handling
 
@@ -924,7 +924,7 @@ The principle: for every external dependency, ask "what happens when this fails?
 
 ## 13. Testing and Product Ownership
 
-Testing isn't just about catching bugs — it's about protecting product behavior. When you write a test for "wallet balance must never go negative," you're encoding a product rule. When that test fails six months later during a refactor, it's not just a code problem; it's a product protection mechanism that just fired.
+Tests protect product behavior as well as catching bugs. When you write a test for "wallet balance must never go negative," you're encoding a product rule. When that test fails six months later during a refactor, it identifies a product rule that the refactor has broken.
 
 Good tests protect:
 
@@ -951,7 +951,7 @@ A good engineer doesn't chase 100% code coverage. They ask: "If this breaks, wha
 Here are the testing antipatterns I see most often in Java backend codebases:
 
 ### 1. Only Testing Happy Paths
-Every method gets a test for "it works" and nothing else. No edge cases, no error conditions, no boundary values. These test suites give a false sense of security — they all pass, but the system fails the moment anything goes wrong.
+Every method gets a test for "it works" and nothing else. The tests omit edge cases, error conditions, and boundary values. These test suites give a false sense of security: they all pass, but the system fails the moment anything goes wrong.
 
 ### 2. Mocking the Database for Repository Logic
 ```java
@@ -971,7 +971,7 @@ When every test has 15 `when(...)` lines mocking internal collaborators, tests b
 The code uses `@Transactional`, but no test verifies what happens on failure. Does the rollback actually work? Does the connection pool recover? Are nested transactions behaving as expected? Test the failure path.
 
 ### 6. No Tests for Concurrency-Sensitive Behavior
-"If it works sequentially, it'll work concurrently" — famous last words. Code that modifies shared state needs concurrent test coverage, especially in financial or inventory systems.
+"If it works sequentially, it'll work concurrently" is an unsafe assumption. Code that modifies shared state needs concurrent test coverage, especially in financial or inventory systems.
 
 ### 7. Confusing Code Coverage with Confidence
 80% line coverage means nothing if the 20% you're missing is the error handling, the transaction boundaries, and the concurrency paths. Coverage measures what code was *executed*, not what behavior was *verified*.
@@ -992,7 +992,7 @@ Here are short, interview-friendly answers to common testing questions:
 
 ### What is the difference between unit and integration tests?
 
-**Unit tests** verify a single class in isolation, using test doubles for dependencies. They're fast (milliseconds), focused, and test logic, not infrastructure. **Integration tests** verify that your code works with real external systems — real databases, real HTTP calls, real message brokers. They catch problems unit tests can't, like incorrect SQL or serialization issues, but run in seconds rather than milliseconds.
+**Unit tests** verify a single class in isolation, using test doubles for dependencies. They're fast (milliseconds), focused, and test logic, not infrastructure. **Integration tests** verify that your code works with real external systems, including real databases, HTTP calls, and message brokers. They catch problems unit tests can't, like incorrect SQL or serialization issues, but run in seconds rather than milliseconds.
 
 ### What should you mock in unit tests?
 
@@ -1000,7 +1000,7 @@ Mock **external dependencies at architectural boundaries**: databases, HTTP clie
 
 ### How does DI help testing?
 
-Dependency Injection — specifically constructor injection — lets you pass test doubles through the constructor instead of the class creating its own dependencies with `new`. This means you can test a service with an in-memory repository and a fake notification sender, instead of needing PostgreSQL and SMTP running. No framework, no reflection, no `@Autowired` required.
+Dependency Injection, specifically constructor injection, lets you pass test doubles through the constructor instead of the class creating its own dependencies with `new`. This means you can test a service with an in-memory repository and a fake notification sender, instead of needing PostgreSQL and SMTP running. No framework, no reflection, no `@Autowired` required.
 
 ### How would you test a money transfer?
 
@@ -1013,7 +1013,7 @@ At multiple levels:
 
 ### How would you test transaction rollback?
 
-Write an integration test that triggers a failure midway through the transaction and then verify the database state is unchanged. For example: debit wallet A, then throw an exception before crediting wallet B. After the test, query both wallets from the database and assert wallet A's balance was not changed — proving the rollback worked.
+Write an integration test that triggers a failure midway through the transaction and then verify the database state is unchanged. For example: debit wallet A, then throw an exception before crediting wallet B. After the test, query both wallets from the database and assert wallet A's balance was not changed, proving the rollback worked.
 
 ### How would you test concurrent wallet debits?
 
@@ -1021,11 +1021,11 @@ Use `ExecutorService`, `CountDownLatch`, and multiple threads. Create a wallet w
 
 ### What are contract tests?
 
-Contract tests verify that the interface between two systems matches what both sides expect. They don't test behavior — they test *shape*. For REST APIs, contract tests verify response schemas match the OpenAPI spec. For events, they verify the JSON schema of published messages. For microservices using Pact, the consumer defines its expectations and the provider verifies them. Contract tests are especially valuable when teams evolve services independently.
+Contract tests verify that the interface between two systems matches what both sides expect. They test *shape* rather than behavior. For REST APIs, contract tests verify response schemas match the OpenAPI spec. For events, they verify the JSON schema of published messages. For microservices using Pact, the consumer defines its expectations and the provider verifies them. Contract tests are especially valuable when teams evolve services independently.
 
 ### How do you decide what to test?
 
-Based on **product risk**, not code coverage targets. Money movement, auth, and data integrity are critical — test them at multiple levels with concurrency and failure-path coverage. Notification sending and formatting are lower risk — unit tests plus integration smoke tests are usually enough. Ask: "If this breaks, what's the impact on the user and the business?"
+Based on **product risk**, not code coverage targets. Money movement, auth, and data integrity are critical; test them at multiple levels with concurrency and failure-path coverage. Notification sending and formatting are lower risk; unit tests plus integration smoke tests are usually enough. Ask: "If this breaks, what's the impact on the user and the business?"
 
 ### Is high code coverage always good?
 
@@ -1033,13 +1033,13 @@ No. 90% line coverage with no assertions on error handling, concurrency, or inte
 
 ### How do tests support product ownership?
 
-Tests encode product rules as executable specifications. A test that asserts "wallet balance must never go negative" protects the product from regressions — even if the original engineer leaves, even during aggressive refactoring. Tests are the safety net that lets you say "yes" to change requests with confidence. Without them, every change is a gamble. With them, product ownership means understanding the rules and knowing they're enforced.
+Tests encode product rules as executable specifications. A test that asserts "wallet balance must never go negative" protects the product from regressions even if the original engineer leaves, even during aggressive refactoring. Tests are the safety net that lets you say "yes" to change requests with confidence. Without them, every change is a gamble. With them, product ownership means understanding the rules and knowing they're enforced.
 
 ## 16. Conclusion
 
-A good testing strategy isn't about hitting a coverage number. It's about distributing confidence across the right levels so that when you push to production at 5 PM on a Friday, you're not holding your breath.
+Choose test levels according to the behavior and risks you need to verify. A coverage number alone cannot tell you whether a transfer rolls back or handles concurrent requests correctly.
 
-The practical takeaway is straightforward:
+Apply each level where it can verify the relevant behavior:
 
 - **Unit test your business rules** — domain logic, value objects, pure computation. JUnit and Mockito, fast and focused. No Spring context needed.
 - **Integration test your infrastructure** — database queries, transactions, migrations, serialization. Testcontainers gives you real PostgreSQL in a container. These are slower but catch the problems unit tests structurally cannot.
@@ -1047,8 +1047,8 @@ The practical takeaway is straightforward:
 - **E2E test your critical flows** — the user journeys where failure is unacceptable. Keep these few and focused; don't let them become a maintenance burden.
 - **Test the failure paths** — timeouts, retries, rollbacks, constraint violations, concurrent access. The happy path is the easy part. Production reveals the rest.
 
-The wallet example throughout this article isn't just pedagogical. Financial systems are pure stress tests for testing strategy — they require correctness, consistency, concurrency safety, and failure resilience, all at once. If you can test a money transfer thoroughly, you can test anything.
+The wallet example needs tests for correctness, consistency, concurrent access, and failure handling. Each level covers a different part of those requirements.
 
-And when your colleague asks "what happens if the database goes down between the debit and the credit?" — you'll have the test that answers.
+And when your colleague asks "what happens if the database goes down between the debit and the credit?", you'll have the test that answers.
 
 <Quiz slug="testing-java-backends" />

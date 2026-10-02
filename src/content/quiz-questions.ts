@@ -11,6 +11,66 @@ export interface QuizData {
 }
 
 const quizData: Record<string, QuizData> = {
+  "jev-reasoning-effort": {
+    title: "Test Your Understanding",
+    questions: [
+      {
+        question: "What does Jev return for a choice question?",
+        options: [
+          "A complete implementation of the requested feature",
+          "A typed selection from the defined options, with probabilities",
+          "A replacement system prompt for the coding model",
+          "A deterministic proof that the selected answer is correct",
+        ],
+        correctIndex: 1,
+        explanation:
+          "Jev evaluates supplied state against typed questions. A choice question selects from the options you define; a valid type does not guarantee a correct judgment.",
+      },
+      {
+        question: "Why can switching to a cheaper model increase the next turn's cost?",
+        options: [
+          "A router always doubles the output token price",
+          "Cheaper models cannot read source code",
+          "The new model may need to process a long conversation without the previous model's cache hits",
+          "The gateway charges for every available model on each request",
+        ],
+        correctIndex: 2,
+        explanation:
+          "A lower token price does not account for lost cache reuse. Compare total task cost, including uncached history, routing and retries.",
+      },
+      {
+        question: "Does keeping the same model guarantee that changing effort preserves the prompt cache?",
+        options: [
+          "Yes, effort is never part of the prompt configuration",
+          "Yes, if Jev chooses the effort",
+          "No, prompt caching is unavailable for reasoning models",
+          "No, it depends on the model and the mechanism used to apply the effort change",
+        ],
+        correctIndex: 3,
+        explanation:
+          "Some effort changes restart the cached prefix. Supported per-message or configuration-update mechanisms can preserve it, subject to provider and client restrictions.",
+      },
+      {
+        question: "What applies Jev's recommendation to a new Codex CLI session?",
+        options: [
+          "Passing the validated choice as a model_reasoning_effort configuration override",
+          "Receiving HTTP 200 from the Gateway",
+          "Asking the running model to think harder in prose",
+          "Adding the Jev endpoint to AGENTS.md without applying a client setting",
+        ],
+        correctIndex: 0,
+        explanation:
+          "The client must apply the effort value before the coding request. The walkthrough uses Codex's configuration override for a new session; connectivity and prompt instructions alone do not change native effort.",
+      },
+      {
+        question: "At $0.04 per million billed input tokens, what do 1,000 Jev decisions of 2,000 tokens each cost?",
+        options: ["$80", "$8", "$0.08", "$0.00008"],
+        correctIndex: 2,
+        explanation:
+          "The batch contains two million billed input tokens, so the input charge is 2 × $0.04 = $0.08. The corresponding cost per decision is $0.00008.",
+      },
+    ],
+  },
   "dependency-injection-java": {
     title: "Test Your Understanding",
     questions: [
