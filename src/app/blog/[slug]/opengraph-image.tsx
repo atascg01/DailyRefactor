@@ -116,7 +116,6 @@ export default async function OpengraphImage({
             {article ? `${article.author.name} · dailyrefactor.dev` : "dailyrefactor.dev"}
           </div>
         </div>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={illustration}
           alt=""
