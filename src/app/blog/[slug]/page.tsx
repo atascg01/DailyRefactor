@@ -39,7 +39,7 @@ export async function generateMetadata({
     openGraph: {
       title: article.title,
       description: article.excerpt,
-      images: [article.image],
+      // og:image comes from ./opengraph-image.tsx (a PNG; link previews can't render SVG covers)
       url,
       type: "article",
       publishedTime,
@@ -50,7 +50,6 @@ export async function generateMetadata({
       creator: "@atascg",
       title: article.title,
       description: article.excerpt,
-      images: [article.image],
     },
   };
 }
