@@ -11,6 +11,72 @@ export interface QuizData {
 }
 
 const quizData: Record<string, QuizData> = {
+  "ai-agents-multiple-machines": {
+    title: "Test Your Understanding",
+    questions: [
+      {
+        question: "Why does the repo keep a separate Codex config.toml for each operating system?",
+        options: [
+          "Codex uses a different file format on macOS",
+          "Codex writes machine-specific runtime paths and project trust entries into it",
+          "Git cannot store the same file for two operating systems",
+          "The file contains the Codex login token",
+        ],
+        correctIndex: 1,
+        explanation:
+          "Paths to a Windows .exe, the bundled Node runtime and trusted project folders would point at nothing on a Mac. The install script links the copy for the current OS.",
+      },
+      {
+        question:
+          "On a second machine, the install script finds a settings.json that differs from the repo version. What happens?",
+        options: [
+          "The script merges the two JSON files automatically",
+          "The script stops and refuses to install",
+          "The repo version is linked, the machine's copy is backed up, and a compare command is printed",
+          "The machine's version overwrites the repo file",
+        ],
+        correctIndex: 2,
+        explanation:
+          "A script can't tell which differences are wanted. Entries that only exist on the machine are merged automatically; conflicting versions of the same file are resolved by hand from the backup.",
+      },
+      {
+        question: "Why not sync the whole ~/.codex or ~/.claude folder with a cloud drive?",
+        options: [
+          "Cloud drives can't store hidden folders",
+          "The folders mostly hold runtime state, including login files and databases the apps write while they run",
+          "The agents refuse to start when their folder is synced",
+          "Git is faster than any cloud drive",
+        ],
+        correctIndex: 1,
+        explanation:
+          "Only a few files in each folder are configuration. Syncing everything copies credentials to every machine and has two computers writing the same databases.",
+      },
+      {
+        question: "Why does .gitattributes pin these files to LF line endings?",
+        options: [
+          "LF files are smaller and save disk space",
+          "The working tree is the live configuration, so a CRLF checkout could rewrite files the agents read",
+          "GitHub rejects private repositories with CRLF files",
+          "Symlinks only work with LF files",
+        ],
+        correctIndex: 1,
+        explanation:
+          "A global autocrlf setting converts line endings on checkout. Here that would change the real config files, including shell scripts bundled with skills.",
+      },
+      {
+        question: "What problem does install.ps1 -Check detect?",
+        options: [
+          "API keys accidentally committed to the repo",
+          "A tool that replaced a symlink with a regular file when saving",
+          "Outdated versions of installed skills",
+          "Merge conflicts in config.toml",
+        ],
+        correctIndex: 1,
+        explanation:
+          "A save that writes a new file and renames it over the old one replaces the link without warning. The check reports such paths as NOTLINK, and re-running the installer restores them.",
+      },
+    ],
+  },
   "jev-reasoning-effort": {
     title: "Test Your Understanding",
     questions: [

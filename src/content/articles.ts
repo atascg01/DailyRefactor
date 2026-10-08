@@ -17,6 +17,22 @@ export interface ArticleMeta {
 
 export const articles: ArticleMeta[] = [
   {
+    id: 14,
+    slug: "ai-agents-multiple-machines",
+    title: "Using AI Coding Agents on Multiple Computers: Keep Claude Code, Codex and OpenCode in Sync",
+    excerpt:
+      "A step-by-step setup for sharing agent settings, instructions and skills between Windows, macOS and Linux machines with one private Git repo and an install script, including what to do when the second machine already has its own configuration.",
+    category: "AI",
+    image: "/images/ai-agents-multiple-machines.svg",
+    date: "October 8, 2026",
+    readTime: "14 min read",
+    author: {
+      name: "Andres Tascon",
+      avatar: "/images/pic_photo.jpg",
+      role: "Senior Software Engineer @ Oracle",
+    },
+  },
+  {
     id: 13,
     slug: "jev-reasoning-effort",
     title: "My Jev Experiment: Choosing Effort for Codex and Claude Code",

@@ -1,0 +1,352 @@
+import Quiz from "@/components/Quiz";
+
+If you use an AI coding agent on more than one computer, the setup drifts. You install a skill on your laptop and it isn't on your desktop. You refine your agent instructions at work and the home machine still runs the old ones. A settings change made on one machine has to be repeated by hand on the other, and a new computer means rebuilding everything from memory.
+
+I ran into this with three agents, Claude Code, Codex and OpenCode, on a Windows PC and a Mac. This guide is the setup I built to fix it: one private Git repository holds the configuration, and a small install script on each machine links the agents' config locations to that repository. A change made on one computer becomes a commit, and the other computer gets it with `git pull`.
+
+The steps use Claude Code, Codex and OpenCode, but the approach works for any agent that keeps its configuration in files under your home directory. Install scripts for Windows, macOS and Linux are available to download.
+
+## How the setup works
+
+Each agent reads its configuration from a fixed place, such as `~/.claude/settings.json`. Instead of keeping a real file there, you put a symbolic link that points into the repository:
+
+```text
+~/.claude/settings.json  ──link──▶  ~/dotfiles/claude/settings.json  ──git──▶  private GitHub repo
+```
+
+The agent reads and writes the file as usual. Because the file lives in the repository, every change shows up in `git status`, and every machine that pulls the repository gets the same version.
+
+This is the dotfiles pattern developers already use for shell and editor configuration. Agent configuration needs a few extra rules, because it sits next to credentials, databases and machine-specific paths. The steps below cover those.
+
+## Why not sync the whole folders
+
+The obvious shortcut is to put `~/.claude` or `~/.codex` in a cloud-synced folder. Look inside one before doing that. My `~/.codex` folder had more than 60 entries, and only three of them described how I want Codex to behave. The rest were SQLite databases, logs, session archives, lock files and the login file. Syncing all of it would copy credentials to every machine and have two computers writing the same databases.
+
+Tracking only the configuration files avoids both problems.
+
+## Step 1: Decide what to track
+
+Go through each agent's folder and separate configuration from runtime state. For the three agents I use, the split looks like this:
+
+| Agent | Folder | Track | Leave out |
+| --- | --- | --- | --- |
+| Claude Code | `~/.claude` | `settings.json`, plus `CLAUDE.md`, `agents/` and `commands/` if you use them | `.credentials.json`, `.claude.json`, `history.jsonl`, `projects/`, `sessions/`, caches |
+| Codex | `~/.codex` | `config.toml`, `AGENTS.md`, your own skills | `auth.json`, SQLite databases, logs, archived sessions, temp files |
+| OpenCode | `~/.config/opencode` | `opencode.jsonc`, `AGENTS.md`, `package.json`, `plugins/` | `node_modules/` |
+| Shared skills | `~/.agents` | `skills/`, `.skill-lock.json` | nothing |
+
+`~/.agents/skills` is where my skills installer puts skills shared between agents, with a link to each one in `~/.claude/skills`. Its lock file records where each skill came from, such as `obra/superpowers` or `mattpocock/skills`, so it is worth tracking next to the skills.
+
+These paths are the same on Windows, macOS and Linux, relative to the home directory. That is what makes one repository layout work on every machine.
+
+## Step 2: Create the repository
+
+Pick a folder for the repository and give it one subfolder per agent:
+
+```text
+dotfiles/
+├── shared/
+│   ├── skills/               → ~/.agents/skills
+│   └── skill-lock.json       → ~/.agents/.skill-lock.json
+├── claude/settings.json      → ~/.claude/settings.json
+├── codex/
+│   ├── config.windows.toml   → ~/.codex/config.toml (Windows)
+│   ├── config.macos.toml     → ~/.codex/config.toml (macOS)
+│   └── AGENTS.md             → ~/.codex/AGENTS.md
+├── opencode/
+│   ├── opencode.jsonc, AGENTS.md, package.json
+│   └── plugins/              → ~/.config/opencode/plugins
+├── install.ps1               (Windows)
+├── install.sh                (macOS and Linux)
+├── .gitignore
+└── .gitattributes
+```
+
+Copy the files you decided to track from your current machine into the matching repository folders. Copy rather than move: the install script in step 7 replaces the originals with links, and backs up any that no longer match the repository.
+
+Create the repository as private. Even without credentials, agent settings can describe your projects. My Claude Code `settings.json`, for example, includes notes about one of my projects. With the GitHub CLI:
+
+```bash
+cd ~/dotfiles
+git init -b main
+gh repo create dotfiles --private --source=. --remote=origin
+```
+
+Hold off on the first commit until the next two steps are done.
+
+## Step 3: Keep secrets out
+
+The agents already keep most secrets in separate files. Claude Code stores its login in `.credentials.json`, and Codex in `auth.json`. Neither is in the list from step 1.
+
+Secrets can also hide inside configuration files, usually as API keys for MCP servers. Move them into environment variables where the agent supports it. I use a Hevy MCP server in Codex, and Codex can read its bearer token from an environment variable instead of the config file:
+
+```toml
+[mcp_servers.hevy]
+url = "https://<mcp-server-host>/mcp"
+bearer_token_env_var = "HEVY_API_KEY"
+```
+
+Keys that plugins read from their own files can stay outside the tracked folders. One of my OpenCode plugins reads its key from a file in a separate folder under `~/.config`, which the repository never touches.
+
+Before the first commit, search the repository for anything that looks like a credential. On Windows, run this in Git Bash:
+
+```bash
+grep -rnIE '(sk-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9]{20,}|github_pat_|AKIA[0-9A-Z]{16}|-----BEGIN|(api[_-]?key|secret|token|password)["'"'"' ]*[:=])' .
+```
+
+Then add a `.gitignore` as a safety net for the files that should never be committed ([download](/downloads/agent-dotfiles/gitignore.txt)):
+
+```text
+*.key
+*.pem
+.env
+.env.*
+auth.json
+.credentials.json
+*.sqlite
+*.sqlite-*
+node_modules/
+```
+
+## Step 4: Make files portable between operating systems
+
+Two Git defaults cause trouble when the same files are used on Windows and on macOS or Linux.
+
+The first is line endings. Git on Windows is often configured to convert line endings to CRLF on checkout. In a normal repository, that only changes how files look in an editor. Here, the working tree is the live configuration, so a checkout can rewrite files the agents read, including shell scripts bundled with skills. A `.gitattributes` file keeps everything LF except PowerShell scripts ([download](/downloads/agent-dotfiles/gitattributes.txt)):
+
+```text
+* text=auto eol=lf
+*.ps1 text eol=crlf
+```
+
+The second is the executable bit. Windows doesn't have one, so a repository created there stores every file as non-executable. In my repository, that affected nine scripts inside skills that start with `#!`. On a Mac, they would fail with a permission error. Git can set the bit from any platform:
+
+```bash
+git update-index --chmod=+x shared/skills/executing-plans/scripts/task-start
+```
+
+To find candidates, list the tracked files that start with a shebang:
+
+```bash
+git ls-files | while read f; do head -c2 "$f" | grep -q '#!' && echo "$f"; done
+```
+
+## Step 5: Split machine-specific files
+
+Most agent configuration is portable. Check each tracked file for absolute paths before assuming it is.
+
+In my setup, Codex's `config.toml` was the only file that depended on the machine. Next to my preferences (model, reasoning effort, MCP servers), Codex writes entries of its own into it:
+
+- the path to a Windows `.exe` it runs when a turn ends
+- the paths to its bundled Node runtime
+- a trust entry for every project folder I have opened, with Windows paths
+
+A Mac reading that file would get a configuration pointing at programs that don't exist. The fix is one copy per operating system: `codex/config.windows.toml`, `codex/config.macos.toml` and, if you need it, `codex/config.linux.toml`. The install scripts link the right one to `~/.codex/config.toml`.
+
+You don't need to write the copy for a new OS by hand. When the repository has no config for the current OS, the install script adopts the machine's existing `config.toml`: it moves the file into the repository under the OS-specific name and links it back. You commit it afterwards.
+
+This file will keep changing. While I was writing this guide, Codex updated itself and rewrote the runtime paths in its config. The change appeared in `git diff` like any other edit. Commit it on the machine where it happened.
+
+The trade-off is that a Codex preference change, such as a new default model, has to be made in each OS file. For a single file, that is simpler than introducing a templating tool.
+
+## Step 6: Add the install scripts
+
+Download the script for each platform you use and put it in the repository root:
+
+- [install.ps1](/downloads/agent-dotfiles/install.ps1) for Windows
+- [install.sh](/downloads/agent-dotfiles/install.sh) for macOS and Linux
+
+Both scripts start with the same mapping from repository paths to live paths. Edit it to match the files you track:
+
+```bash
+LINKS="
+shared/skills|$HOME/.agents/skills
+shared/skill-lock.json|$HOME/.agents/.skill-lock.json
+claude/settings.json|$HOME/.claude/settings.json
+codex/config.$OS.toml|$HOME/.codex/config.toml
+codex/AGENTS.md|$HOME/.codex/AGENTS.md
+opencode/opencode.jsonc|$HOME/.config/opencode/opencode.jsonc
+opencode/AGENTS.md|$HOME/.config/opencode/AGENTS.md
+opencode/package.json|$HOME/.config/opencode/package.json
+opencode/plugins|$HOME/.config/opencode/plugins
+"
+```
+
+For each entry, the scripts:
+
+1. Skip a live path that is already a link to the repository.
+2. Adopt a machine's file when the repository has no copy for this OS (step 5).
+3. Back up or merge whatever is in the way (step 8 covers the rules).
+4. Remove an old link that points somewhere else, but never its target.
+5. Create the link.
+
+They also link each shared skill into `~/.claude/skills` if it isn't there. When I first ran the script, three of my shared skills had never been linked into Claude Code. The Claude Code session I was working in listed all three as available right after the run.
+
+Both scripts can run as often as you like. A second run on a configured machine changes nothing.
+
+### Windows: enable Developer Mode
+
+Windows lets ordinary users create symbolic links only when Developer Mode is on. Open the setting with:
+
+```bash
+start ms-settings:developers
+```
+
+Even with Developer Mode on, Windows PowerShell 5.1 refused to create a link:
+
+```text
+New-Item : Administrator privilege required for this operation.
+FullyQualifiedErrorId : NewItemSymbolicLinkElevationRequired
+```
+
+`New-Item -ItemType SymbolicLink` in PowerShell 5.1 doesn't use the unprivileged symlink mode that Developer Mode enables. `mklink` from `cmd` does, so `install.ps1` calls it instead:
+
+```powershell
+cmd /c mklink "$dst" "$src"       # file
+cmd /c mklink /D "$dst" "$src"    # directory
+```
+
+### macOS and Linux: notes on install.sh
+
+Any user can create a symlink with `ln -s` on macOS and Linux, so no setting is needed. The script picks the OS from `uname -s` (`Darwin` or `Linux`) and has two details worth knowing if you edit it.
+
+It is written for Bash 3.2, the version macOS ships. That version has no associative arrays, so the mapping is a plain list of `repo|live` lines.
+
+It checks whether a link is correct with Bash's `-ef` test, which compares the files themselves. My first version compared paths as text, and a test run reported every link as wrong because the same folder had two spellings. macOS has the same issue, because `/tmp` is a link to `/private/tmp`:
+
+```bash
+if [ -L "$dst" ] && [ "$dst" -ef "$src" ]; then
+  say ok "$dst"
+  continue
+fi
+```
+
+## Step 7: Install on your first machine
+
+Run the script in check mode first. It reports what it would do without changing anything:
+
+```bash
+./install.sh --check      # macOS and Linux
+.\install.ps1 -Check      # Windows
+```
+
+Each path shows up as `ok`, `MISSING`, `NOTLINK`, `WRONGLNK` or `ADOPT`. On the first machine, the repository copies match the live files, so expect `NOTLINK` for each of them. Then run it for real:
+
+```bash
+./install.sh              # macOS and Linux
+.\install.ps1             # Windows
+```
+
+Run the check again. Every line should say `ok`. Start each agent and confirm it still finds its settings and skills. Then make the first commit and push:
+
+```bash
+git add -A
+git commit -m "Agent configuration"
+git push -u origin main
+```
+
+## Step 8: Add a second machine
+
+The second machine is the harder case: it usually has its own settings, skills and instructions by the time you clone the repository. My Mac did.
+
+### Clone and preview
+
+```bash
+git clone git@github.com:<you>/dotfiles.git ~/dotfiles
+cd ~/dotfiles
+./install.sh --check
+```
+
+The check shows what the install would do with each piece of existing configuration:
+
+| On the machine | Check output | What the install does |
+| --- | --- | --- |
+| A skill or plugin the repository doesn't have | `+merge` | Moves it into the repository, then links |
+| Skills lock entries the repository doesn't have | `+merge ... entries` | Adds them to the repository's lock file |
+| A file or skill identical to the repository version | `same` | Replaces it with the link, no backup |
+| A file or skill that differs from the repository version | `!diff` | Links the repository version and backs up the machine's copy |
+| A Codex config, with no copy for this OS in the repository | `ADOPT` | Moves it into the repository as `config.<os>.toml` |
+
+Anything moved aside goes to `~/.dotfiles-backup/<timestamp>/`, so the install never deletes your configuration. Additions merge automatically, because a skill or lock entry that only exists on one machine loses nothing by being added. Conflicts don't: when both sides have a different version of the same thing, the repository version wins. That is the part to review before you run the install.
+
+### Review the conflicts
+
+My Mac's check reported 8 skills only the Mac had, 12 shared skills that differed from the repository, and different versions of the skills lock file and both OpenCode files. Each conflict needed a different answer.
+
+For skills, the question is which side is newer. The lock files record when each skill was installed or updated, so compare them:
+
+```bash
+jq -r '.skills | to_entries[] | "\(.key)  \(.value.updatedAt)"' ~/.agents/.skill-lock.json | sort > /tmp/machine.txt
+jq -r '.skills | to_entries[] | "\(.key)  \(.value.updatedAt)"' ~/dotfiles/shared/skill-lock.json | sort > /tmp/repo.txt
+diff /tmp/machine.txt /tmp/repo.txt
+```
+
+The Mac's copies of the superpowers skills dated from April 16, 2026, and the repository's from October 5. Letting the repository win was an upgrade.
+
+For configuration files, look at the difference itself:
+
+```bash
+diff ~/.config/opencode/opencode.jsonc ~/dotfiles/opencode/opencode.jsonc
+```
+
+This one went the other way. The Mac's `opencode.jsonc` configured a model provider and its models; the repository's copy from Windows contained only the schema line. When the machine's version should win, copy it over the repository file before installing. The check then reports it as `same`, and the next pull gives the first machine the same configuration:
+
+```bash
+cp ~/.config/opencode/opencode.jsonc ~/dotfiles/opencode/opencode.jsonc
+```
+
+The OpenCode `package.json` was the simple case: the repository pinned a newer plugin version, so it could win, followed by `npm install` in `~/.config/opencode`.
+
+When two files both contain changes you want, merge them by hand. A script can't tell which differences are wanted, and JSON and TOML don't merge reliably line by line. For every conflict it backs up, the install prints a command to compare the two versions:
+
+```text
+!diff    claude/settings.json (differs from repo; repo version wins, this copy is backed up)
+backup   ~/.claude/settings.json -> ~/.dotfiles-backup/<timestamp>/.claude/settings.json
+compare  git diff --no-index "~/.dotfiles-backup/<timestamp>/.claude/settings.json" "~/dotfiles/claude/settings.json"
+```
+
+Copy what you want to keep into the repository file. The agent sees the edit straight away, because the live path is a link to it.
+
+The skills lock file is the one conflict the scripts merge for you. Each machine's copy lists the skills installed there, so letting one side win would drop the other side's entries, and the skills installer would no longer know where those skills came from. The install adds the machine's missing entries to the repository's lock file and keeps the repository's entry for skills both sides have. `install.sh` uses `jq` for this, which recent macOS versions include. Without `jq`, it prints a warning and the machine's copy goes to the backup like any other conflict.
+
+### Install and share the result
+
+```bash
+./install.sh
+./install.sh --check
+```
+
+On my Mac, the install merged the 8 skills, replaced the 12 older ones, adopted the Codex config and linked everything else, and the check ended with `All links OK.` Commit what the second machine contributed and push:
+
+```bash
+git add -A
+git commit -m "Add second machine"
+git push
+```
+
+Then pull on the first machine and run its install script. That links the skills that arrived from the second machine into `~/.claude/skills`. On my Windows PC, the run linked the 8 Mac skills, and the Claude Code session I had open listed them as available straight away.
+
+Finally, recreate what the repository deliberately doesn't contain: environment variables for API keys, plugin key files, a login for each agent and any dependency installs. Keep that list in the repository's README so a new machine doesn't depend on your memory.
+
+## Step 9: Keep machines in sync
+
+Day to day, the repository works like any other:
+
+- After changing settings, instructions or skills on one machine, commit and push.
+- Before starting work on the other machine, pull.
+- After pulling new skills, run the install script so Claude Code gets links to them.
+- When Codex updates its runtime paths, commit the change on the machine where it happened.
+
+Run the check now and then. If an agent saves a settings file by writing a new file and renaming it over the old one, the link is replaced by a regular file and changes stop reaching the repository. I haven't seen that happen. When Codex rewrote its config during the update in step 5, the link survived. That is one save by one tool, though, so the check stays part of the routine. If it reports `NOTLINK`, run the install script to back up the stray file and restore the link.
+
+## How I tested this
+
+I set up the repository on my Windows PC and added my Mac as the second machine, following the steps above. Both report every link as `ok`.
+
+Before the Mac run, I tested `install.sh` on Windows in Git Bash with native symlinks enabled, against temporary home directories and a stub `uname` that reported `Darwin` and then `Linux`. The second-machine cases in the step 8 table were tested there for both scripts first.
+
+The automatic lock file merge was added after my Mac's install. On the Mac, I did that step by hand with `jq`. I tested the PowerShell version against a copy of the Mac's lock file, and the `install.sh` fallback for a machine without `jq`. The `jq` merge inside `install.sh` hasn't run on a Mac yet.
+
+I haven't run `install.sh` on a real Linux machine.
+
+<Quiz slug="ai-agents-multiple-machines" />

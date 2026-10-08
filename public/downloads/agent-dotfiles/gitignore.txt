@@ -1,0 +1,10 @@
+# Safety net: secrets and runtime state must never land here
+*.key
+*.pem
+.env
+.env.*
+auth.json
+.credentials.json
+*.sqlite
+*.sqlite-*
+node_modules/
